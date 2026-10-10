@@ -1,0 +1,8 @@
+{
+  "name": "Creative Sabermetrics Studio",
+  "description": "Filmmaker scouting and talent evaluation based on sabermetric Moneyball analytics, measuring Creative WAR, word-of-mouth lift, and value ROI yield.",
+  "permissions": [],
+  "capabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

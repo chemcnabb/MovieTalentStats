@@ -19,7 +19,7 @@ export default function SabermetricsDashboard() {
   const fetchTalent = async () => {
     setLoading(true);
     try {
-      let url = 'http://localhost:8000/talent/';
+      let url = '/talent/';
       const params = new URLSearchParams();
       
       if (roleFilter) params.append('role', roleFilter);
@@ -66,7 +66,7 @@ export default function SabermetricsDashboard() {
     );
 
     try {
-      const response = await fetch(`http://localhost:8000/talent/${id}`, {
+      const response = await fetch(`/talent/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ [field]: parsedValue }),

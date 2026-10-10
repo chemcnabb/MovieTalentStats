@@ -23,7 +23,7 @@ export default function SabermetricsDashboard() {
   const fetchTalent = async () => {
     setLoading(true);
     try {
-      let url = 'http://localhost:8000/talent/';
+      let url = '/talent/';
       const params = new URLSearchParams();
       
       if (roleFilter) params.append('role', roleFilter);
@@ -69,7 +69,7 @@ export default function SabermetricsDashboard() {
     setTalentPool(prev => prev.map(t => t.id === id ? { ...t, [field]: parsedValue } : t));
 
     try {
-      const response = await fetch(`http://localhost:8000/talent/${id}`, {
+      const response = await fetch(`/talent/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ [field]: parsedValue }),
@@ -209,106 +209,117 @@ export default function SabermetricsDashboard() {
                   return (
                     <tr key={talent.id} className={`hover:bg-slate-700/20 transition-colors ${isCompared ? 'bg-sky-950/20 border-l-2 border-sky-400' : ''}`}>
                       <td className="p-4 text-center">
-                        <input type="checkbox" checked={isCompared} onChange={() => toggleComparison(talent)}
-                          className="w-4 h-4 accent-sky-400 cursor-pointer" />
+                        <input 
+                          type="checkbox"
+                          checked={isCompared}
+                          onChange={() => toggleComparison(talent)}
+                          className="w-4 h-4 rounded text-sky-500 focus:ring-sky-500 bg-slate-900 border-slate-600 accent-sky-400 cursor-pointer"
+                        />
                       </td>
-                      <td className="p-4 font-semibold">{talent.name}</td>
-                      <td className="p-4 text-slate-300">{talent.role}</td>
-                      <td className="p-4">
-                        <input type="number" min="0" max="1" step="0.01" value={talent.completion_rate ?? 0}
-                          onChange={e => handleUpdateMetric(talent.id, 'completion_rate', e.target.value)}
-                          className="w-20 bg-slate-900 border border-slate-600 rounded px-2 py-1" />
-                      </td>
-                      <td className="p-4">
-                        <input type="number" min="0" max="10" step="0.1" value={talent.word_of_mouth_score ?? 0}
-                          onChange={e => handleUpdateMetric(talent.id, 'word_of_mouth_score', e.target.value)}
-                          className="w-20 bg-slate-900 border border-slate-600 rounded px-2 py-1" />
-                      </td>
-                      <td className="p-4">
-                        <input type="number" min="0" max="1" step="0.01" value={talent.rewrite_ratio ?? 0}
-                          onChange={e => handleUpdateMetric(talent.id, 'rewrite_ratio', e.target.value)}
-                          className="w-20 bg-slate-900 border border-slate-600 rounded px-2 py-1" />
-                      </td>
-                      <td className="p-4">
-                        <input type="number" min="0" max="1" step="0.01" value={talent.ip_strength ?? 0}
-                          onChange={e => handleUpdateMetric(talent.id, 'ip_strength', e.target.value)}
-                          className="w-20 bg-slate-900 border border-slate-600 rounded px-2 py-1" />
-                      </td>
-                      <td className="p-4 whitespace-nowrap">${talent.base_cost?.toLocaleString() ?? '0'}</td>
-                      {undervaluedOnly && <td className="p-4 text-amber-400 font-bold">{talent.value_rating}x</td>}
-                      <td className="p-4 bg-emerald-950/20 text-center text-emerald-400 font-black">{talent.creative_war}</td>
-                    </tr>
-                  );
-                })}
-                {talentPool?.length === 0 && !loading && (
-                  <tr><td colSpan={undervaluedOnly ? 10 : 9} className="p-10 text-center text-slate-400">
-                    No creative profiles match the filtered query parameters.
-                  </td></tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-          {/* Table Footer Control Deck */}
-          <div className="flex items-center justify-between mt-5 gap-4">
-            <div className="text-sm text-slate-400">Page {currentPage} of {totalPages}</div>
-            <div className="flex gap-2">
-              <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                disabled={currentPage === 1 || loading}
-                className="bg-slate-800 border border-slate-700 px-3 py-1.5 rounded-lg text-white text-xs font-bold hover:bg-slate-700 disabled:opacity-30 flex items-center gap-1 transition">
-                <ChevronLeft size={14} /> Previous
-              </button>
-              <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                disabled={currentPage === totalPages || loading}
-                className="bg-slate-800 border border-slate-700 px-3 py-1.5 rounded-lg text-white text-xs font-bold hover:bg-slate-700 disabled:opacity-30 flex items-center gap-1 transition">
-                Next <ChevronRight size={14} />
-              </button>
-            </div>
-          </div>
-        </>
-      )}
+{talent.name}
+${talent.base_cost?.toLocaleString()}
+{undervaluedOnly && (
+{talent.value_rating}x
+)}
+);
+})}
 
-      {/* Head-to-Head Comparison Panel Engine Module */}
-      {compareList.length > 0 && (
-        <section className="mt-8 bg-slate-800 border border-slate-700 rounded-xl p-6">
-          <div className="flex items-center justify-between mb-5">
-            <h2 className="text-xl font-black flex items-center gap-2"><Scale className="text-sky-400" /> Advanced Bench Comparison Matrix</h2>
-            <button onClick={() => setCompareList([])} aria-label="Clear comparison"
-              className="text-slate-400 hover:text-white p-1 rounded-full hover:bg-slate-700 transition"><X size={20} /></button>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {compareList.map(asset => (
-              <article key={asset.id} className="rounded-xl border border-slate-700 bg-slate-900 p-5 space-y-4">
-                <div>
-                  <h3 className="font-black text-lg text-white">{asset.name}</h3>
-                  <div className="text-sm text-slate-400">{asset.role}</div>
-                </div>
-                <div className="text-sm text-slate-400">Hiring Cost
-                  <div className="text-xl text-white font-bold">${asset.base_cost?.toLocaleString() ?? '0'}</div>
-                </div>
-                <div className="space-y-2">
-                  <div className="flex justify-between text-sm"><span>Audience Retention Rate</span><b>{Math.round((asset.completion_rate ?? 0) * 100)}%</b></div>
-                  <div className="h-2 bg-slate-700 rounded-full overflow-hidden">
-                    <div className="bg-sky-400 h-full transition-all duration-500" style={{ width: `${Math.min(100, Math.max(0, (asset.completion_rate ?? 0) * 100))}%` }} />
-                  </div>
-                  <div className="flex justify-between text-sm"><span>Organic Word-of-Mouth (WOM Velocity)</span><b>{asset.word_of_mouth_score ?? 0} / 10</b></div>
-                  <div className="h-2 bg-slate-700 rounded-full overflow-hidden">
-                    <div className="bg-indigo-400 h-full transition-all duration-500" style={{ width: `${Math.min(100, Math.max(0, (asset.word_of_mouth_score ?? 0) * 10))}%` }} />
-                  </div>
-                  <div className="flex justify-between text-sm"><span>IP Reliance</span><b>{Math.round((asset.ip_strength ?? 0) * 100)}%</b></div>
-                  <div className="flex justify-between text-sm"><span>Rewrite Variance</span><b>{Math.round((asset.rewrite_ratio ?? 0) * 100)}%</b></div>
-                </div>
-                <div className="border-t border-slate-700 pt-4 flex justify-between items-center">
-                  <div className="text-amber-400 font-bold">{asset.value_rating != null && `${asset.value_rating}x ROI Index`}</div>
-                  <div className="text-emerald-400 font-black">{asset.creative_war} WAR</div>
-                </div>
-              </article>
-            ))}
-          </div>
-          {compareList.length === 1 && (
-            <p className="mt-4 text-center text-slate-400 text-sm">Select a second creator from the bench checkbox columns above to unlock full analytical comparison benchmarking.</p>
-          )}
-        </section>
-      )}
-    </div>
-  );
+{talentPool?.length === 0 && !loading && (
+No creative profiles match the filtered query parameters.
+)}
+{/* Table Footer Control Deck */}
+
+
+Page {currentPage} of {totalPages}
+
+
+<button
+onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+disabled={currentPage === 1 || loading}
+className="bg-slate-800 border border-slate-700 px-3 py-1.5 rounded-lg text-white text-xs font-bold hover:bg-slate-700 disabled:opacity-30 disabled:hover:bg-slate-800 flex items-center gap-1 transition"
+>
+ Previous
+
+<button
+onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+disabled={currentPage === totalPages || loading}
+className="bg-slate-800 border border-slate-700 px-3 py-1.5 rounded-lg text-white text-xs font-bold hover:bg-slate-700 disabled:opacity-30 disabled:hover:bg-slate-800 flex items-center gap-1 transition"
+>
+Next 
+
+
+
+</>
+)}
+{/* Head-to-Head Comparison Panel Engine Module */}
+{compareList.length > 0 && (
+ Advanced Bench Comparison Matrix
+
+<button
+onClick={() => setCompareList([])}
+className="text-slate-400 hover:text-white p-1 rounded-full hover:bg-slate-800 transition"
+>
+
+
+{compareList.map((asset) => (
+
+
+
+{asset.name}
+{asset.role}
+
+
+Hiring Cost
+${asset.base_cost?.toLocaleString()}
+
+{/* Data Visualisation Ratios */}
+
+
+
+Audience Retention Rate
+{Math.round(asset.completion_rate * 100)}%
+
+
+<div className="bg-sky-400 h-full transition-all duration-500" style={{ width: ${asset.completion_rate * 100}% }}>
+
+Organic Word-of-Mouth (WOM Velocity)
+{asset.word_of_mouth_score} / 10
+
+
+<div className="bg-indigo-400 h-full transition-all duration-500" style={{ width: ${asset.word_of_mouth_score * 10}% }}>
+
+IP Reliance
+{Math.round(asset.ip_strength * 100)}%
+
+
+Rewrite Variance
+{Math.round(asset.rewrite_ratio * 100)}%
+
+
+{/* Absolute Target Metric Yield Footers */}
+
+
+{asset.value_rating && (
+
+{asset.value_rating}x ROI Index
+
+)}
+
+
+ {asset.creative_war} WAR
+
+
+
+))}
+{compareList.length === 1 && (
+
+Select a second creator from the bench checkbox columns above to unlock full analytical comparison benchmarking.
+
+)}
+
+
+
+)}
+
+);
 }
