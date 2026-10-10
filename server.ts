@@ -24,6 +24,9 @@ export interface TalentRecord {
   context_lift?: number;
   efficiency_score?: number;
   replacement_delta?: number;
+  cost_per_war?: number;
+  surplus_value?: number;
+  hidden_talent_index?: number;
 }
 
 interface FormulaConfig {
@@ -82,6 +85,22 @@ function formatTalentRecord(item: TalentRecord, config: FormulaConfig = DEFAULT_
   const replacementBaselineWar = 1.5;
   const replacement_delta = Math.round((war - replacementBaselineWar) * 100) / 100;
 
+  // Dollars per WAR ($ / 1.0 WAR produced)
+  const cost_per_war = Math.round(cost / Math.max(0.1, war));
+
+  // Market baseline: Industry average studio pays $65,000 per 1.0 WAR
+  const marketValueProduced = war * 65000;
+  const surplus_value = Math.round(Math.max(0, marketValueProduced - cost));
+
+  // Hidden Talent Index (0 to 100): isolates pure organic craft vs cost
+  const compNorm = (Number(item.completion_rate) || 0) * 100;
+  const womNorm = ((Number(item.word_of_mouth_score) || 1) / 10) * 100;
+  const craftScore = compNorm * 0.5 + womNorm * 0.35;
+  const ipBonus = (1.0 - (Number(item.ip_strength) || 0)) * 25;
+  const discBonus = (1.0 - (Number(item.rewrite_ratio) || 0)) * 15;
+  const costDiscountFactor = Math.max(0.6, Math.min(1.5, Math.log10(cost) / Math.log10(500000)));
+  const hti = Math.round(Math.min(100, Math.max(5, ((craftScore + ipBonus + discBonus) / costDiscountFactor) * 0.8)));
+
   return {
     ...item,
     creative_war: war,
@@ -90,6 +109,9 @@ function formatTalentRecord(item: TalentRecord, config: FormulaConfig = DEFAULT_
     context_lift: contextLift,
     efficiency_score: efficiencyScore,
     replacement_delta: replacement_delta,
+    cost_per_war: cost_per_war,
+    surplus_value: surplus_value,
+    hidden_talent_index: hti,
   };
 }
 
@@ -172,6 +194,47 @@ async function startServer() {
   app.get('/talent/summary', handleSummaryStats);
   app.get('/api/talent/summary', handleSummaryStats);
 
+  // Scatter matrix sample endpoint (stratified sample across cost and WAR tiers)
+  const handleScatterSample = (req: Request, res: Response) => {
+    const config = getFormulaConfig(req);
+    const formattedPool = talentPool.map((t) => formatTalentRecord(t, config));
+
+    // Top bargains (high WAR, low cost)
+    const bargains = formattedPool
+      .filter((t) => (t.creative_war ?? 0) >= 3.0 && (t.base_cost ?? 0) <= 250000)
+      .sort((a, b) => (b.value_rating ?? 0) - (a.value_rating ?? 0))
+      .slice(0, 75);
+
+    // Franchise stars (high WAR, high cost)
+    const stars = formattedPool
+      .filter((t) => (t.creative_war ?? 0) >= 10.0)
+      .sort((a, b) => (b.creative_war ?? 0) - (a.creative_war ?? 0))
+      .slice(0, 75);
+
+    // Sleepers (high HTI)
+    const sleepers = formattedPool
+      .filter((t) => (t.hidden_talent_index ?? 0) >= 70)
+      .sort((a, b) => (b.hidden_talent_index ?? 0) - (a.hidden_talent_index ?? 0))
+      .slice(0, 75);
+
+    // Representative sample of the rest
+    const step = Math.max(1, Math.floor(formattedPool.length / 100));
+    const spread: TalentRecord[] = [];
+    for (let i = 0; i < formattedPool.length && spread.length < 100; i += step) {
+      spread.push(formattedPool[i]);
+    }
+
+    const sampleMap = new Map<string, TalentRecord>();
+    for (const item of [...bargains, ...stars, ...sleepers, ...spread]) {
+      sampleMap.set(item.id, item);
+    }
+
+    res.json(Array.from(sampleMap.values()));
+  };
+
+  app.get('/talent/scatter-sample', handleScatterSample);
+  app.get('/api/talent/scatter-sample', handleScatterSample);
+
   // Get specific talent profile by ID
   const handleGetTalentById = (req: Request, res: Response) => {
     const id = req.params.talent_id;
@@ -185,6 +248,44 @@ async function startServer() {
 
   app.get('/talent/:talent_id', handleGetTalentById);
   app.get('/api/talent/:talent_id', handleGetTalentById);
+
+  // Statistical Comps endpoint (Bill James similarity)
+  const handleGetTalentComps = (req: Request, res: Response) => {
+    const id = req.params.talent_id;
+    const target = talentMap.get(id);
+    if (!target) {
+      return res.status(404).json({ error: 'Talent not found' });
+    }
+    const config = getFormulaConfig(req);
+    const targetFormatted = formatTalentRecord(target, config);
+
+    // Calculate distance against other creators in talentPool
+    const candidates = talentPool
+      .filter((t) => t.id !== id)
+      .slice(0, 1500)
+      .map((t) => {
+        const formatted = formatTalentRecord(t, config);
+        const dist = Math.sqrt(
+          Math.pow((t.completion_rate - target.completion_rate) * 10, 2) +
+          Math.pow(t.word_of_mouth_score - target.word_of_mouth_score, 2) +
+          Math.pow((t.rewrite_ratio - target.rewrite_ratio) * 10, 2) +
+          Math.pow((t.ip_strength - target.ip_strength) * 5, 2) +
+          Math.pow(((formatted.creative_war ?? 0) - (targetFormatted.creative_war ?? 0)) * 0.4, 2)
+        );
+        return { item: formatted, dist };
+      });
+
+    candidates.sort((a, b) => a.dist - b.dist);
+    const comps = candidates.slice(0, 4).map((c) => ({
+      ...c.item,
+      similarity_pct: Math.max(65, Math.min(99, Math.round((1 - c.dist / 15) * 100))),
+    }));
+
+    res.json(comps);
+  };
+
+  app.get('/talent/:talent_id/comps', handleGetTalentComps);
+  app.get('/api/talent/:talent_id/comps', handleGetTalentComps);
 
   // Main talent query endpoint with filtering, search, and sorting
   const handleQueryTalent = (req: Request, res: Response) => {
@@ -271,6 +372,15 @@ async function startServer() {
           break;
         case 'ip':
           comparison = (a.ip_strength ?? 0) - (b.ip_strength ?? 0);
+          break;
+        case 'hti':
+          comparison = (b.hidden_talent_index ?? 0) - (a.hidden_talent_index ?? 0);
+          break;
+        case 'cost_per_war':
+          comparison = (a.cost_per_war ?? 0) - (b.cost_per_war ?? 0);
+          break;
+        case 'surplus':
+          comparison = (b.surplus_value ?? 0) - (a.surplus_value ?? 0);
           break;
         case 'war':
         default:
