@@ -5,6 +5,7 @@ import fs from 'fs';
 import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import { runHistoricalValidation } from './tests/historical_validation.test';
+import { getTalentFilmography, getTalentAvatar } from './src/data/filmographyData';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -33,6 +34,7 @@ export interface TalentRecord {
   cost_per_war?: number;
   surplus_value?: number;
   hidden_talent_index?: number;
+  avatar_url?: string;
 }
 
 interface FormulaConfig {
@@ -212,6 +214,7 @@ function formatTalentRecord(
     cost_per_war,
     surplus_value,
     hidden_talent_index: hti,
+    avatar_url: getTalentAvatar(item.name),
   };
 }
 
@@ -379,6 +382,20 @@ async function startServer() {
   app.get('/talent/:talent_id', handleGetTalentById);
   app.get('/api/talent/:talent_id', handleGetTalentById);
 
+  // Filmography & Movie Posters endpoint
+  const handleGetTalentMovies = (req: Request, res: Response) => {
+    const id = req.params.talent_id;
+    const item = talentMap.get(id);
+    if (!item) {
+      return res.status(404).json({ error: 'Talent profile not found' });
+    }
+    const filmography = getTalentFilmography(item);
+    res.json(filmography);
+  };
+
+  app.get('/talent/:talent_id/movies', handleGetTalentMovies);
+  app.get('/api/talent/:talent_id/movies', handleGetTalentMovies);
+
   // Statistical Comps endpoint (Bill James similarity)
   const handleGetTalentComps = (req: Request, res: Response) => {
     const id = req.params.talent_id;
@@ -526,6 +543,9 @@ async function startServer() {
           break;
         case 'name':
           comparison = a.name.localeCompare(b.name);
+          break;
+        case 'role':
+          comparison = a.role.localeCompare(b.role);
           break;
         case 'retention':
         case 'completion':

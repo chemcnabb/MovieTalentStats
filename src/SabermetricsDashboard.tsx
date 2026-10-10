@@ -34,8 +34,16 @@ import {
   CheckCircle,
   ShieldCheck,
   Compass,
+  Film,
+  Clapperboard,
+  Calendar,
+  Image as ImageIcon,
+  Eye,
+  ArrowUp,
+  ArrowDown,
 } from 'lucide-react';
 import FiveToolRadarChart, { FiveToolTalentInput } from './components/FiveToolRadarChart';
+import { getTalentFilmography, getTalentAvatar, MovieCredit, TalentFilmography } from './data/filmographyData';
 
 interface Talent {
   id: string;
@@ -61,6 +69,7 @@ interface Talent {
   surplus_value?: number;
   hidden_talent_index?: number;
   similarity_pct?: number;
+  avatar_url?: string;
 }
 
 interface SummaryStats {
@@ -136,6 +145,10 @@ export default function SabermetricsDashboard() {
   const [talentComps, setTalentComps] = useState<Talent[]>([]);
   const [drawerCompareTalent, setDrawerCompareTalent] = useState<FiveToolTalentInput | null>(null);
   const [loadingComps, setLoadingComps] = useState(false);
+  const [talentFilmography, setTalentFilmography] = useState<TalentFilmography | null>(null);
+  const [loadingFilmography, setLoadingFilmography] = useState(false);
+  const [drawerTab, setDrawerTab] = useState<'metrics' | 'filmography' | 'comps' | 'statcast'>('metrics');
+  const [selectedPosterPreview, setSelectedPosterPreview] = useState<MovieCredit | null>(null);
   const [showDraftModal, setShowDraftModal] = useState(false);
   const [showGuideModal, setShowGuideModal] = useState(false);
   const [showPipelineModal, setShowPipelineModal] = useState(false);
@@ -434,6 +447,17 @@ export default function SabermetricsDashboard() {
     }
   };
 
+  // Sort by column header
+  const handleSortColumn = (field: string) => {
+    if (sortBy === field) {
+      setSortDir((prev) => (prev === 'asc' ? 'desc' : 'asc'));
+    } else {
+      setSortBy(field);
+      setSortDir(field === 'name' || field === 'role' ? 'asc' : 'desc');
+    }
+    setCurrentPage(1);
+  };
+
   // Fetch Comps for selected creator
   const fetchComps = useCallback(async (talentId: string) => {
     setLoadingComps(true);
@@ -450,12 +474,35 @@ export default function SabermetricsDashboard() {
     }
   }, []);
 
+  // Fetch Filmography and Movie Posters for selected creator
+  const fetchFilmography = useCallback(async (talent: Talent) => {
+    setLoadingFilmography(true);
+    try {
+      const res = await fetch(`/talent/${talent.id}/movies`);
+      if (res.ok) {
+        const data = await res.json();
+        setTalentFilmography(data);
+      } else {
+        setTalentFilmography(getTalentFilmography(talent));
+      }
+    } catch {
+      setTalentFilmography(getTalentFilmography(talent));
+    } finally {
+      setLoadingFilmography(false);
+    }
+  }, []);
+
   // Open Player Card
-  const openPlayerCard = (talent: Talent) => {
+  const openPlayerCard = (
+    talent: Talent,
+    initialTab: 'metrics' | 'filmography' | 'comps' | 'statcast' = 'metrics'
+  ) => {
     setSelectedTalent(talent);
     setPlayerEditState({ ...talent });
     setDrawerCompareTalent(null);
+    setDrawerTab(initialTab);
     fetchComps(talent.id);
+    fetchFilmography(talent);
   };
 
   // Save Player Card metrics
@@ -1481,41 +1528,203 @@ base_path = "movie_data"
                   <table className="w-full text-left border-collapse text-sm">
                     <thead>
                       <tr className="bg-slate-950 border-b border-slate-800 text-slate-400 font-bold text-[11px] tracking-wider uppercase">
-                        <th className="p-3 w-8 text-center">★</th>
+                        <th className="p-3 w-8 text-center" title="Watchlist">★</th>
                         <th className="p-3 w-10 text-center" title="Bench up to 2 for side-by-side comparison">
                           Bench
                         </th>
-                        <th className="p-3 min-w-[170px]">Creative Asset</th>
-                        <th className="p-3">Discipline</th>
-                        <th className="p-3" title="Hidden Talent Index (0 to 100 sleeper rating)">
-                          HTI Rating
+                        <th
+                          onClick={() => handleSortColumn('name')}
+                          title="Click to sort by Creator Name"
+                          className={`p-3 min-w-[200px] cursor-pointer select-none transition group hover:text-white hover:bg-slate-800/60 ${
+                            sortBy === 'name' ? 'text-emerald-400 bg-emerald-950/30' : ''
+                          }`}
+                        >
+                          <div className="flex items-center gap-1.5">
+                            <span>Creative Asset</span>
+                            {sortBy === 'name' ? (
+                              sortDir === 'asc' ? <ArrowUp size={12} className="text-emerald-400" /> : <ArrowDown size={12} className="text-emerald-400" />
+                            ) : (
+                              <ArrowUpDown size={12} className="opacity-0 group-hover:opacity-60 text-slate-400" />
+                            )}
+                          </div>
                         </th>
-                        <th className="p-3 text-center" title="Creative wRC+ (100 = league average benchmark)">
-                          wRC+
+                        <th
+                          onClick={() => handleSortColumn('role')}
+                          title="Click to sort by Discipline / Role"
+                          className={`p-3 cursor-pointer select-none transition group hover:text-white hover:bg-slate-800/60 ${
+                            sortBy === 'role' ? 'text-emerald-400 bg-emerald-950/30' : ''
+                          }`}
+                        >
+                          <div className="flex items-center gap-1.5">
+                            <span>Discipline</span>
+                            {sortBy === 'role' ? (
+                              sortDir === 'asc' ? <ArrowUp size={12} className="text-emerald-400" /> : <ArrowDown size={12} className="text-emerald-400" />
+                            ) : (
+                              <ArrowUpDown size={12} className="opacity-0 group-hover:opacity-60 text-slate-400" />
+                            )}
+                          </div>
                         </th>
-                        <th className="p-3 text-center" title="Career Consistency Index (0 to 100%)">
-                          Consistency
+                        <th
+                          onClick={() => handleSortColumn('hti')}
+                          title="Hidden Talent Index (0 to 100 sleeper rating) - Click to sort"
+                          className={`p-3 cursor-pointer select-none transition group hover:text-white hover:bg-slate-800/60 ${
+                            sortBy === 'hti' ? 'text-emerald-400 bg-emerald-950/30' : ''
+                          }`}
+                        >
+                          <div className="flex items-center gap-1.5">
+                            <span>HTI Rating</span>
+                            {sortBy === 'hti' ? (
+                              sortDir === 'asc' ? <ArrowUp size={12} className="text-emerald-400" /> : <ArrowDown size={12} className="text-emerald-400" />
+                            ) : (
+                              <ArrowUpDown size={12} className="opacity-0 group-hover:opacity-60 text-slate-400" />
+                            )}
+                          </div>
                         </th>
-                        <th className="p-3" title="Audience finish rate (0.0 to 1.0)">
-                          Retention %
+                        <th
+                          onClick={() => handleSortColumn('wrc_plus')}
+                          title="Creative wRC+ (100 = league average benchmark) - Click to sort"
+                          className={`p-3 text-center cursor-pointer select-none transition group hover:text-white hover:bg-slate-800/60 ${
+                            sortBy === 'wrc_plus' ? 'text-emerald-400 bg-emerald-950/30' : ''
+                          }`}
+                        >
+                          <div className="flex items-center justify-center gap-1.5">
+                            <span>wRC+</span>
+                            {sortBy === 'wrc_plus' ? (
+                              sortDir === 'asc' ? <ArrowUp size={12} className="text-emerald-400" /> : <ArrowDown size={12} className="text-emerald-400" />
+                            ) : (
+                              <ArrowUpDown size={12} className="opacity-0 group-hover:opacity-60 text-slate-400" />
+                            )}
+                          </div>
                         </th>
-                        <th className="p-3" title="Organic exit velocity / viral lift (1 to 10)">
-                          WOM Velocity
+                        <th
+                          onClick={() => handleSortColumn('consistency')}
+                          title="Career Consistency Index (0 to 100%) - Click to sort"
+                          className={`p-3 text-center cursor-pointer select-none transition group hover:text-white hover:bg-slate-800/60 ${
+                            sortBy === 'consistency' ? 'text-emerald-400 bg-emerald-950/30' : ''
+                          }`}
+                        >
+                          <div className="flex items-center justify-center gap-1.5">
+                            <span>Consistency</span>
+                            {sortBy === 'consistency' ? (
+                              sortDir === 'asc' ? <ArrowUp size={12} className="text-emerald-400" /> : <ArrowDown size={12} className="text-emerald-400" />
+                            ) : (
+                              <ArrowUpDown size={12} className="opacity-0 group-hover:opacity-60 text-slate-400" />
+                            )}
+                          </div>
                         </th>
-                        <th className="p-3" title="Production inefficiency penalty">
-                          Rewrite
+                        <th
+                          onClick={() => handleSortColumn('completion')}
+                          title="Audience finish rate (0.0 to 1.0) - Click to sort"
+                          className={`p-3 cursor-pointer select-none transition group hover:text-white hover:bg-slate-800/60 ${
+                            sortBy === 'completion' ? 'text-emerald-400 bg-emerald-950/30' : ''
+                          }`}
+                        >
+                          <div className="flex items-center gap-1.5">
+                            <span>Retention %</span>
+                            {sortBy === 'completion' ? (
+                              sortDir === 'asc' ? <ArrowUp size={12} className="text-emerald-400" /> : <ArrowDown size={12} className="text-emerald-400" />
+                            ) : (
+                              <ArrowUpDown size={12} className="opacity-0 group-hover:opacity-60 text-slate-400" />
+                            )}
+                          </div>
                         </th>
-                        <th className="p-3 text-right font-mono">Hiring Cap</th>
-                        <th className="p-3 text-right font-mono" title="Dollars invested per 1.0 WAR produced">
-                          $/WAR
+                        <th
+                          onClick={() => handleSortColumn('wom')}
+                          title="Organic exit velocity / viral lift (1 to 10) - Click to sort"
+                          className={`p-3 cursor-pointer select-none transition group hover:text-white hover:bg-slate-800/60 ${
+                            sortBy === 'wom' ? 'text-emerald-400 bg-emerald-950/30' : ''
+                          }`}
+                        >
+                          <div className="flex items-center gap-1.5">
+                            <span>WOM Velocity</span>
+                            {sortBy === 'wom' ? (
+                              sortDir === 'asc' ? <ArrowUp size={12} className="text-emerald-400" /> : <ArrowDown size={12} className="text-emerald-400" />
+                            ) : (
+                              <ArrowUpDown size={12} className="opacity-0 group-hover:opacity-60 text-slate-400" />
+                            )}
+                          </div>
                         </th>
-                        <th className="p-3 text-center text-amber-400 font-mono" title="WAR generated per $100k contract tier">
-                          Value ROI
+                        <th
+                          onClick={() => handleSortColumn('rewrite')}
+                          title="Production inefficiency penalty - Click to sort"
+                          className={`p-3 cursor-pointer select-none transition group hover:text-white hover:bg-slate-800/60 ${
+                            sortBy === 'rewrite' ? 'text-emerald-400 bg-emerald-950/30' : ''
+                          }`}
+                        >
+                          <div className="flex items-center gap-1.5">
+                            <span>Rewrite</span>
+                            {sortBy === 'rewrite' ? (
+                              sortDir === 'asc' ? <ArrowUp size={12} className="text-emerald-400" /> : <ArrowDown size={12} className="text-emerald-400" />
+                            ) : (
+                              <ArrowUpDown size={12} className="opacity-0 group-hover:opacity-60 text-slate-400" />
+                            )}
+                          </div>
                         </th>
-                        <th className="p-3 bg-emerald-950/40 text-emerald-400 font-black text-center min-w-[110px]" title="Creative WAR (Raw / Bayesian Regressed with sample weights)">
-                          WAR (Raw / Reg)
+                        <th
+                          onClick={() => handleSortColumn('cost')}
+                          title="Hiring Cap / Market Cost ($) - Click to sort"
+                          className={`p-3 text-right font-mono cursor-pointer select-none transition group hover:text-white hover:bg-slate-800/60 ${
+                            sortBy === 'cost' ? 'text-emerald-400 bg-emerald-950/30' : ''
+                          }`}
+                        >
+                          <div className="flex items-center justify-end gap-1.5">
+                            <span>Hiring Cap</span>
+                            {sortBy === 'cost' ? (
+                              sortDir === 'asc' ? <ArrowUp size={12} className="text-emerald-400" /> : <ArrowDown size={12} className="text-emerald-400" />
+                            ) : (
+                              <ArrowUpDown size={12} className="opacity-0 group-hover:opacity-60 text-slate-400" />
+                            )}
+                          </div>
                         </th>
-                        <th className="p-3 text-center w-16">Profile</th>
+                        <th
+                          onClick={() => handleSortColumn('cost_per_war')}
+                          title="Dollars invested per 1.0 WAR produced - Click to sort"
+                          className={`p-3 text-right font-mono cursor-pointer select-none transition group hover:text-white hover:bg-slate-800/60 ${
+                            sortBy === 'cost_per_war' ? 'text-emerald-400 bg-emerald-950/30' : ''
+                          }`}
+                        >
+                          <div className="flex items-center justify-end gap-1.5">
+                            <span>$/WAR</span>
+                            {sortBy === 'cost_per_war' ? (
+                              sortDir === 'asc' ? <ArrowUp size={12} className="text-emerald-400" /> : <ArrowDown size={12} className="text-emerald-400" />
+                            ) : (
+                              <ArrowUpDown size={12} className="opacity-0 group-hover:opacity-60 text-slate-400" />
+                            )}
+                          </div>
+                        </th>
+                        <th
+                          onClick={() => handleSortColumn('value')}
+                          title="WAR generated per $100k contract tier (Value ROI) - Click to sort"
+                          className={`p-3 text-center text-amber-400 font-mono cursor-pointer select-none transition group hover:text-amber-300 hover:bg-slate-800/60 ${
+                            sortBy === 'value' ? 'text-emerald-400 bg-emerald-950/30' : ''
+                          }`}
+                        >
+                          <div className="flex items-center justify-center gap-1.5">
+                            <span>Value ROI</span>
+                            {sortBy === 'value' ? (
+                              sortDir === 'asc' ? <ArrowUp size={12} className="text-emerald-400" /> : <ArrowDown size={12} className="text-emerald-400" />
+                            ) : (
+                              <ArrowUpDown size={12} className="opacity-0 group-hover:opacity-60 text-slate-400" />
+                            )}
+                          </div>
+                        </th>
+                        <th
+                          onClick={() => handleSortColumn('war')}
+                          title="Creative WAR (Raw / Bayesian Regressed with sample weights) - Click to sort"
+                          className={`p-3 bg-emerald-950/40 text-emerald-400 font-black text-center min-w-[120px] cursor-pointer select-none transition group hover:text-emerald-300 hover:bg-emerald-900/40 ${
+                            sortBy === 'war' || sortBy === 'regressed_war' ? 'ring-1 ring-emerald-500/50' : ''
+                          }`}
+                        >
+                          <div className="flex items-center justify-center gap-1.5">
+                            <span>WAR (Raw / Reg)</span>
+                            {sortBy === 'war' || sortBy === 'regressed_war' ? (
+                              sortDir === 'asc' ? <ArrowUp size={12} className="text-emerald-300" /> : <ArrowDown size={12} className="text-emerald-300" />
+                            ) : (
+                              <ArrowUpDown size={12} className="opacity-0 group-hover:opacity-60 text-emerald-400" />
+                            )}
+                          </div>
+                        </th>
+                        <th className="p-3 text-center w-24">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-800/60 font-sans">
@@ -1556,13 +1765,33 @@ base_path = "movie_data"
                               />
                             </td>
 
-                            {/* Name */}
+                            {/* Name & Profile Picture */}
                             <td className="p-3 font-semibold text-white">
                               <button
                                 onClick={() => openPlayerCard(talent)}
-                                className="hover:text-emerald-400 text-left transition flex items-center gap-1.5"
+                                className="hover:text-emerald-400 text-left transition flex items-center gap-2.5 group"
                               >
-                                <span>{talent.name}</span>
+                                <div className="relative w-8 h-8 rounded-full overflow-hidden bg-slate-800 border border-slate-700/80 group-hover:border-emerald-500/60 flex-shrink-0 flex items-center justify-center text-[10px] font-bold text-slate-300 shadow-sm transition">
+                                  <img
+                                    src={talent.avatar_url || getTalentAvatar(talent.name)}
+                                    alt={talent.name}
+                                    className="w-full h-full object-cover"
+                                    onError={(e) => {
+                                      (e.currentTarget as HTMLElement).style.display = 'none';
+                                    }}
+                                  />
+                                  <span className="select-none font-mono">
+                                    {talent.name.slice(0, 2).toUpperCase()}
+                                  </span>
+                                </div>
+                                <div className="min-w-0">
+                                  <span className="truncate group-hover:text-emerald-400 font-bold block">
+                                    {talent.name}
+                                  </span>
+                                  <span className="text-[10px] text-slate-500 font-normal block font-mono">
+                                    {(talent.vote_count ?? 800).toLocaleString()} votes
+                                  </span>
+                                </div>
                               </button>
                             </td>
 
@@ -1689,15 +1918,31 @@ base_path = "movie_data"
                               </div>
                             </td>
 
-                            {/* Quick View Button */}
+                            {/* Quick Actions */}
                             <td className="p-3 text-center">
-                              <button
-                                onClick={() => openPlayerCard(talent)}
-                                className="text-slate-400 hover:text-white p-1 rounded hover:bg-slate-800 transition"
-                                title="Open Player Card"
-                              >
-                                <User size={15} />
-                              </button>
+                              <div className="flex items-center justify-center gap-1">
+                                <button
+                                  onClick={() => openPlayerCard(talent, 'filmography')}
+                                  className="text-amber-400/80 hover:text-amber-300 p-1 rounded hover:bg-amber-950/40 transition"
+                                  title="View Filmography & Previous Movie Posters"
+                                >
+                                  <Film size={15} />
+                                </button>
+                                <button
+                                  onClick={() => openPlayerCard(talent, 'metrics')}
+                                  className="text-cyan-400/80 hover:text-cyan-300 p-1 rounded hover:bg-cyan-950/40 transition"
+                                  title="View 5-Tool Radar Scouting Chart"
+                                >
+                                  <Compass size={15} />
+                                </button>
+                                <button
+                                  onClick={() => openPlayerCard(talent, 'metrics')}
+                                  className="text-slate-400 hover:text-white p-1 rounded hover:bg-slate-800 transition"
+                                  title="Open Full Player Card"
+                                >
+                                  <User size={15} />
+                                </button>
+                              </div>
                             </td>
                           </tr>
                         );
@@ -2032,15 +2277,37 @@ base_path = "movie_data"
                 </div>
 
                 {lineupWriter ? (
-                  <div className="space-y-2">
-                    <h4 className="text-lg font-bold text-white">{lineupWriter.name}</h4>
-                    <div className="text-xs text-slate-400 flex justify-between">
-                      <span>Contract: ${lineupWriter.base_cost.toLocaleString()}</span>
-                      <span className="text-emerald-400 font-bold">{lineupWriter.creative_war} WAR</span>
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 rounded-xl overflow-hidden bg-slate-800 border border-emerald-500/40 flex-shrink-0 flex items-center justify-center font-bold text-xs text-slate-300">
+                      <img
+                        src={lineupWriter.avatar_url || getTalentAvatar(lineupWriter.name)}
+                        alt={lineupWriter.name}
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          (e.currentTarget as HTMLElement).style.display = 'none';
+                        }}
+                      />
+                      <span className="font-mono">{lineupWriter.name.slice(0, 2).toUpperCase()}</span>
                     </div>
-                    <div className="text-xs text-slate-400 flex justify-between">
-                      <span>WOM Exit Velocity: {lineupWriter.word_of_mouth_score}/10</span>
-                      <span>Rewrite: {Math.round(lineupWriter.rewrite_ratio * 100)}%</span>
+                    <div className="space-y-1 flex-1 min-w-0">
+                      <div className="flex items-center justify-between">
+                        <h4 className="text-base font-bold text-white truncate">{lineupWriter.name}</h4>
+                        <button
+                          onClick={() => openPlayerCard(lineupWriter, 'filmography')}
+                          className="text-amber-400 hover:text-amber-300 p-0.5 transition"
+                          title="View Filmography"
+                        >
+                          <Film size={13} />
+                        </button>
+                      </div>
+                      <div className="text-xs text-slate-400 flex justify-between">
+                        <span>Contract: ${lineupWriter.base_cost.toLocaleString()}</span>
+                        <span className="text-emerald-400 font-bold">{lineupWriter.creative_war} WAR</span>
+                      </div>
+                      <div className="text-xs text-slate-400 flex justify-between">
+                        <span>WOM: {lineupWriter.word_of_mouth_score}/10</span>
+                        <span>Rewrite: {Math.round(lineupWriter.rewrite_ratio * 100)}%</span>
+                      </div>
                     </div>
                   </div>
                 ) : (
@@ -2080,15 +2347,37 @@ base_path = "movie_data"
                 </div>
 
                 {lineupDirector ? (
-                  <div className="space-y-2">
-                    <h4 className="text-lg font-bold text-white">{lineupDirector.name}</h4>
-                    <div className="text-xs text-slate-400 flex justify-between">
-                      <span>Contract: ${lineupDirector.base_cost.toLocaleString()}</span>
-                      <span className="text-emerald-400 font-bold">{lineupDirector.creative_war} WAR</span>
+                  <div className="flex items-center gap-3">
+                    <div className="w-12 h-12 rounded-xl overflow-hidden bg-slate-800 border border-emerald-500/40 flex-shrink-0 flex items-center justify-center font-bold text-xs text-slate-300">
+                      <img
+                        src={lineupDirector.avatar_url || getTalentAvatar(lineupDirector.name)}
+                        alt={lineupDirector.name}
+                        className="w-full h-full object-cover"
+                        onError={(e) => {
+                          (e.currentTarget as HTMLElement).style.display = 'none';
+                        }}
+                      />
+                      <span className="font-mono">{lineupDirector.name.slice(0, 2).toUpperCase()}</span>
                     </div>
-                    <div className="text-xs text-slate-400 flex justify-between">
-                      <span>Retention: {Math.round(lineupDirector.completion_rate * 100)}%</span>
-                      <span>Rewrite Discipline: {Math.round(lineupDirector.rewrite_ratio * 100)}%</span>
+                    <div className="space-y-1 flex-1 min-w-0">
+                      <div className="flex items-center justify-between">
+                        <h4 className="text-base font-bold text-white truncate">{lineupDirector.name}</h4>
+                        <button
+                          onClick={() => openPlayerCard(lineupDirector, 'filmography')}
+                          className="text-amber-400 hover:text-amber-300 p-0.5 transition"
+                          title="View Filmography"
+                        >
+                          <Film size={13} />
+                        </button>
+                      </div>
+                      <div className="text-xs text-slate-400 flex justify-between">
+                        <span>Contract: ${lineupDirector.base_cost.toLocaleString()}</span>
+                        <span className="text-emerald-400 font-bold">{lineupDirector.creative_war} WAR</span>
+                      </div>
+                      <div className="text-xs text-slate-400 flex justify-between">
+                        <span>Retention: {Math.round(lineupDirector.completion_rate * 100)}%</span>
+                        <span>Rewrite: {Math.round(lineupDirector.rewrite_ratio * 100)}%</span>
+                      </div>
                     </div>
                   </div>
                 ) : (
@@ -2152,6 +2441,44 @@ base_path = "movie_data"
                 <span className="text-[10px] text-slate-500 block">Discipline &amp; Craft Match</span>
               </div>
             </div>
+
+            {/* Production Staff 5-Tool Complementary Radar */}
+            {lineupWriter && lineupDirector && (
+              <div className="mt-6 pt-6 border-t border-slate-800">
+                <FiveToolRadarChart
+                  talent={{
+                    id: lineupWriter.id,
+                    name: lineupWriter.name,
+                    role: `${lineupWriter.role} (Writer)`,
+                    completion_rate: lineupWriter.completion_rate,
+                    word_of_mouth_score: lineupWriter.word_of_mouth_score,
+                    rewrite_ratio: lineupWriter.rewrite_ratio,
+                    ip_strength: lineupWriter.ip_strength,
+                    base_cost: lineupWriter.base_cost,
+                    creative_war: lineupWriter.creative_war,
+                    regressed_war: lineupWriter.regressed_war,
+                    creative_wrc_plus: lineupWriter.creative_wrc_plus,
+                    career_consistency: lineupWriter.career_consistency,
+                  }}
+                  compareTalent={{
+                    id: lineupDirector.id,
+                    name: lineupDirector.name,
+                    role: `${lineupDirector.role} (Director)`,
+                    completion_rate: lineupDirector.completion_rate,
+                    word_of_mouth_score: lineupDirector.word_of_mouth_score,
+                    rewrite_ratio: lineupDirector.rewrite_ratio,
+                    ip_strength: lineupDirector.ip_strength,
+                    base_cost: lineupDirector.base_cost,
+                    creative_war: lineupDirector.creative_war,
+                    regressed_war: lineupDirector.regressed_war,
+                    creative_wrc_plus: lineupDirector.creative_wrc_plus,
+                    career_consistency: lineupDirector.career_consistency,
+                  }}
+                  title="Lineup Balance Radar: Writer vs Director Skill Symmetry"
+                  subtitle="Evaluating how Writer craft offsets Director efficiency, IP leverage, and cost"
+                />
+              </div>
+            )}
           </section>
         )}
 
@@ -2181,9 +2508,31 @@ base_path = "movie_data"
                   className="rounded-xl border border-slate-800 bg-slate-950 p-5 space-y-4"
                 >
                   <div className="flex justify-between items-start">
-                    <div>
-                      <h3 className="font-black text-lg text-white">{asset.name}</h3>
-                      <span className="text-xs text-slate-400 font-medium">{asset.role}</span>
+                    <div className="flex items-center gap-3">
+                      <div className="w-11 h-11 rounded-xl overflow-hidden bg-slate-800 border border-slate-700 flex-shrink-0 flex items-center justify-center font-bold text-xs text-slate-300 shadow-md">
+                        <img
+                          src={asset.avatar_url || getTalentAvatar(asset.name)}
+                          alt={asset.name}
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            (e.currentTarget as HTMLElement).style.display = 'none';
+                          }}
+                        />
+                        <span className="font-mono">{asset.name.slice(0, 2).toUpperCase()}</span>
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-1.5">
+                          <h3 className="font-black text-lg text-white">{asset.name}</h3>
+                          <button
+                            onClick={() => openPlayerCard(asset, 'filmography')}
+                            className="text-amber-400 hover:text-amber-300 p-0.5 transition"
+                            title="View Filmography & Movie Posters"
+                          >
+                            <Film size={13} />
+                          </button>
+                        </div>
+                        <span className="text-xs text-slate-400 font-medium">{asset.role}</span>
+                      </div>
                     </div>
                     <div className="text-right">
                       <span className="text-xs text-slate-400 block">Market Cap</span>
@@ -2310,6 +2659,50 @@ base_path = "movie_data"
                 </p>
               </div>
             )}
+
+            {/* Five-Tool Radar Comparison */}
+            <div className="mt-6 pt-6 border-t border-slate-800/80">
+              <FiveToolRadarChart
+                talent={{
+                  id: compareList[0].id,
+                  name: compareList[0].name,
+                  role: compareList[0].role,
+                  completion_rate: compareList[0].completion_rate,
+                  word_of_mouth_score: compareList[0].word_of_mouth_score,
+                  rewrite_ratio: compareList[0].rewrite_ratio,
+                  ip_strength: compareList[0].ip_strength,
+                  base_cost: compareList[0].base_cost,
+                  creative_war: compareList[0].creative_war,
+                  regressed_war: compareList[0].regressed_war,
+                  creative_wrc_plus: compareList[0].creative_wrc_plus,
+                  career_consistency: compareList[0].career_consistency,
+                }}
+                compareTalent={
+                  compareList[1]
+                    ? {
+                        id: compareList[1].id,
+                        name: compareList[1].name,
+                        role: compareList[1].role,
+                        completion_rate: compareList[1].completion_rate,
+                        word_of_mouth_score: compareList[1].word_of_mouth_score,
+                        rewrite_ratio: compareList[1].rewrite_ratio,
+                        ip_strength: compareList[1].ip_strength,
+                        base_cost: compareList[1].base_cost,
+                        creative_war: compareList[1].creative_war,
+                        regressed_war: compareList[1].regressed_war,
+                        creative_wrc_plus: compareList[1].creative_wrc_plus,
+                        career_consistency: compareList[1].career_consistency,
+                      }
+                    : null
+                }
+                title={
+                  compareList[1]
+                    ? `Head-to-Head 5-Tool Radar: ${compareList[0].name} vs ${compareList[1].name}`
+                    : `5-Tool Radar Scouting: ${compareList[0].name} vs League Benchmark`
+                }
+                subtitle="Completion Rate • Organic WOM • Production Efficiency • IP Strength • Cost Index"
+              />
+            </div>
 
             {compareList.length === 1 && (
               <p className="mt-4 text-center text-slate-500 text-xs">
@@ -2654,303 +3047,649 @@ base_path = "movie_data"
       {/* Deep-Dive Player Card Drawer / Modal */}
       {selectedTalent && (
         <div className="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex justify-end animate-fadeIn">
-          <div className="bg-slate-900 border-l border-slate-800 w-full max-w-xl h-full overflow-y-auto p-6 space-y-6 shadow-2xl flex flex-col justify-between">
+          <div className="bg-slate-900 border-l border-slate-800 w-full max-w-2xl sm:max-w-3xl h-full overflow-y-auto p-6 space-y-6 shadow-2xl flex flex-col justify-between">
             <div className="space-y-6">
-              {/* Header */}
+              {/* Header with Portrait Avatar */}
               <div className="flex justify-between items-start border-b border-slate-800 pb-4">
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-2xl font-black text-white">{selectedTalent.name}</h3>
-                    <span className="text-xs bg-slate-800 text-slate-300 font-mono px-2 py-0.5 rounded">
-                      {selectedTalent.role}
+                <div className="flex items-start gap-3.5">
+                  <div className="relative w-16 h-16 rounded-2xl overflow-hidden bg-slate-800 border-2 border-emerald-500/40 shadow-xl flex-shrink-0 flex items-center justify-center">
+                    <img
+                      src={selectedTalent.avatar_url || getTalentAvatar(selectedTalent.name)}
+                      alt={selectedTalent.name}
+                      className="w-full h-full object-cover"
+                      onError={(e) => {
+                        (e.currentTarget as HTMLElement).style.display = 'none';
+                      }}
+                    />
+                    <span className="text-xl font-black text-slate-300 font-mono select-none">
+                      {selectedTalent.name.slice(0, 2).toUpperCase()}
                     </span>
-                    <button
-                      onClick={() => toggleWatchlist(selectedTalent.id)}
-                      className="text-slate-500 hover:text-amber-400 p-1"
-                      title="Toggle Watchlist"
-                    >
-                      <Star
-                        size={18}
-                        className={watchlist.includes(selectedTalent.id) ? 'text-amber-400 fill-amber-400' : ''}
-                      />
-                    </button>
                   </div>
-                  <span className="text-xs text-slate-500 font-mono block mt-0.5">
-                    ID: {selectedTalent.id}
-                  </span>
+
+                  <div>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <h3 className="text-2xl font-black text-white">{selectedTalent.name}</h3>
+                      <span className="text-xs bg-slate-800 text-slate-300 font-mono px-2 py-0.5 rounded border border-slate-700">
+                        {selectedTalent.role}
+                      </span>
+                      <button
+                        onClick={() => toggleWatchlist(selectedTalent.id)}
+                        className="text-slate-500 hover:text-amber-400 p-1 transition"
+                        title="Toggle Watchlist"
+                      >
+                        <Star
+                          size={18}
+                          className={watchlist.includes(selectedTalent.id) ? 'text-amber-400 fill-amber-400' : ''}
+                        />
+                      </button>
+                    </div>
+
+                    {talentFilmography?.bio && (
+                      <p className="text-xs text-slate-400 mt-1 line-clamp-2 max-w-xl">
+                        {talentFilmography.bio}
+                      </p>
+                    )}
+
+                    <div className="flex items-center gap-2 text-xs text-slate-500 font-mono mt-1.5 flex-wrap">
+                      <span>ID: {selectedTalent.id.slice(0, 16)}</span>
+                      <span>•</span>
+                      <span>{(projectedPlayerMetrics.votes).toLocaleString()} audience votes</span>
+                      {talentFilmography?.movies && (
+                        <>
+                          <span>•</span>
+                          <span className="text-amber-400 font-bold flex items-center gap-1">
+                            <Film size={12} />
+                            {talentFilmography.movies.length} Tracked Titles
+                          </span>
+                        </>
+                      )}
+                    </div>
+                  </div>
                 </div>
+
                 <button
                   onClick={() => setSelectedTalent(null)}
-                  className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800"
+                  className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition"
                 >
                   <X size={20} />
                 </button>
               </div>
 
-              {/* Sabermetric Pillars Cards */}
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                <div className="bg-slate-950 border border-slate-800 rounded-xl p-3">
-                  <span className="text-[10px] uppercase font-bold text-slate-400 block">
-                    Creative WAR
-                  </span>
-                  <div className="text-2xl font-black font-mono text-emerald-400 mt-0.5">
-                    {projectedPlayerMetrics.war}
-                  </div>
-                  <span className="text-[10px] text-slate-500 block">
-                    +{Math.max(0, Math.round((projectedPlayerMetrics.war - 1.5) * 100) / 100)} vs Journeyman
-                  </span>
-                </div>
-
-                <div className="bg-slate-950 border border-slate-800 rounded-xl p-3">
-                  <span className="text-[10px] uppercase font-bold text-slate-400 block">
-                    Regressed WAR (Shrinkage)
-                  </span>
-                  <div className="text-2xl font-black font-mono text-cyan-400 mt-0.5">
-                    {projectedPlayerMetrics.regressedWar}
-                  </div>
-                  <span className="text-[10px] text-slate-500 block font-mono">
-                    {Math.round(projectedPlayerMetrics.sampleWeight * 100)}% weight ({projectedPlayerMetrics.votes.toLocaleString()} votes)
-                  </span>
-                </div>
-
-                <div className="bg-slate-950 border border-slate-800 rounded-xl p-3">
-                  <span className="text-[10px] uppercase font-bold text-slate-400 block">
-                    Creative wRC+
-                  </span>
-                  <div className="text-2xl font-black font-mono text-sky-400 mt-0.5">
-                    {projectedPlayerMetrics.wrcPlus}
-                  </div>
-                  <span className="text-[10px] text-slate-500 block font-mono">
-                    {projectedPlayerMetrics.wrcPlus >= 100 ? `+${projectedPlayerMetrics.wrcPlus - 100}%` : `${projectedPlayerMetrics.wrcPlus - 100}%`} vs League Baseline
-                  </span>
-                </div>
-
-                <div className="bg-slate-950 border border-slate-800 rounded-xl p-3">
-                  <span className="text-[10px] uppercase font-bold text-slate-400 block">
-                    Career Consistency
-                  </span>
-                  <div className="text-2xl font-black font-mono text-teal-400 mt-0.5">
-                    {projectedPlayerMetrics.consistency}%
-                  </div>
-                  <span className="text-[10px] text-slate-500 block">Discipline &amp; floor stability</span>
-                </div>
-
-                <div className="bg-slate-950 border border-slate-800 rounded-xl p-3">
-                  <span className="text-[10px] uppercase font-bold text-slate-400 block">
-                    HTI Sleeper Index
-                  </span>
-                  <div className="text-2xl font-black font-mono text-amber-400 mt-0.5">
-                    {selectedTalent.hidden_talent_index ?? '—'}/100
-                  </div>
-                  <span className="text-[10px] text-slate-500 block">Organic craft score</span>
-                </div>
-
-                <div className="bg-slate-950 border border-slate-800 rounded-xl p-3">
-                  <span className="text-[10px] uppercase font-bold text-slate-400 block">
-                    Cost per WAR
-                  </span>
-                  <div className="text-2xl font-black font-mono text-indigo-400 mt-0.5">
-                    ${Math.round((playerEditState.base_cost ?? 75000) / Math.max(0.1, projectedPlayerMetrics.war)).toLocaleString()}
-                  </div>
-                  <span className="text-[10px] text-slate-500 block">Per 1.0 WAR yield</span>
-                </div>
+              {/* Drawer Navigation Tabs */}
+              <div className="flex items-center gap-1.5 border-b border-slate-800 pb-2.5 overflow-x-auto">
+                <button
+                  onClick={() => setDrawerTab('metrics')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 whitespace-nowrap ${
+                    drawerTab === 'metrics'
+                      ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
+                      : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                  }`}
+                >
+                  <Compass size={14} />
+                  <span>Scouting &amp; 5-Tool Radar</span>
+                </button>
+                <button
+                  onClick={() => setDrawerTab('filmography')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 whitespace-nowrap ${
+                    drawerTab === 'filmography'
+                      ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40'
+                      : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                  }`}
+                >
+                  <Film size={14} />
+                  <span>Previous Movies &amp; Posters ({talentFilmography?.movies.length ?? '...'})</span>
+                </button>
+                <button
+                  onClick={() => setDrawerTab('comps')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 whitespace-nowrap ${
+                    drawerTab === 'comps'
+                      ? 'bg-sky-500/20 text-sky-400 border border-sky-500/40'
+                      : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                  }`}
+                >
+                  <Sparkles size={14} />
+                  <span>Bill James Comps</span>
+                </button>
+                <button
+                  onClick={() => setDrawerTab('statcast')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5 whitespace-nowrap ${
+                    drawerTab === 'statcast'
+                      ? 'bg-rose-500/20 text-rose-400 border border-rose-500/40'
+                      : 'text-slate-400 hover:text-white hover:bg-slate-800'
+                  }`}
+                >
+                  <BarChart3 size={14} />
+                  <span>Statcast Simulator</span>
+                </button>
               </div>
 
-              {/* Statistical Comps (Bill James Similarity) */}
-              <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-3">
-                <div className="flex items-center justify-between">
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-white flex items-center gap-1.5">
-                    <Sparkles size={14} className="text-amber-400" />
-                    Closest Statistical Comps (Bill James Algorithm)
-                  </h4>
-                  <span className="text-[10px] text-slate-500">Across 41,758 creators</span>
-                </div>
-
-                {loadingComps ? (
-                  <div className="text-center py-4 text-xs text-slate-500 animate-pulse">
-                    Calculating similarity distance...
-                  </div>
-                ) : talentComps.length > 0 ? (
-                  <div className="grid grid-cols-2 gap-2">
-                    {talentComps.map((comp) => (
-                      <div
-                        key={comp.id}
-                        onClick={() => openPlayerCard(comp)}
-                        className="bg-slate-900 border border-slate-800 hover:border-slate-700 p-2.5 rounded-lg cursor-pointer transition space-y-1"
-                      >
-                        <div className="flex justify-between items-start">
-                          <strong className="text-white text-xs truncate block">{comp.name}</strong>
-                          <span className="text-[10px] font-mono font-bold text-emerald-400">
-                            {comp.similarity_pct}%
-                          </span>
-                        </div>
-                        <div className="flex justify-between text-[11px] text-slate-400">
-                          <span>{comp.role}</span>
-                          <span className="font-mono text-slate-300">{comp.creative_war} WAR</span>
-                        </div>
+              {/* TAB 1: SCOUTING METRICS & FIVE-TOOL RADAR */}
+              {drawerTab === 'metrics' && (
+                <div className="space-y-6">
+                  {/* Sabermetric Pillars Cards */}
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                    <div className="bg-slate-950 border border-slate-800 rounded-xl p-3">
+                      <span className="text-[10px] uppercase font-bold text-slate-400 block">
+                        Creative WAR
+                      </span>
+                      <div className="text-2xl font-black font-mono text-emerald-400 mt-0.5">
+                        {projectedPlayerMetrics.war}
                       </div>
-                    ))}
+                      <span className="text-[10px] text-slate-500 block">
+                        +{Math.max(0, Math.round((projectedPlayerMetrics.war - 1.5) * 100) / 100)} vs Journeyman
+                      </span>
+                    </div>
+
+                    <div className="bg-slate-950 border border-slate-800 rounded-xl p-3">
+                      <span className="text-[10px] uppercase font-bold text-slate-400 block">
+                        Regressed WAR (Shrinkage)
+                      </span>
+                      <div className="text-2xl font-black font-mono text-cyan-400 mt-0.5">
+                        {projectedPlayerMetrics.regressedWar}
+                      </div>
+                      <span className="text-[10px] text-slate-500 block font-mono">
+                        {Math.round(projectedPlayerMetrics.sampleWeight * 100)}% weight ({projectedPlayerMetrics.votes.toLocaleString()} votes)
+                      </span>
+                    </div>
+
+                    <div className="bg-slate-950 border border-slate-800 rounded-xl p-3">
+                      <span className="text-[10px] uppercase font-bold text-slate-400 block">
+                        Creative wRC+
+                      </span>
+                      <div className="text-2xl font-black font-mono text-sky-400 mt-0.5">
+                        {projectedPlayerMetrics.wrcPlus}
+                      </div>
+                      <span className="text-[10px] text-slate-500 block font-mono">
+                        {projectedPlayerMetrics.wrcPlus >= 100 ? `+${projectedPlayerMetrics.wrcPlus - 100}%` : `${projectedPlayerMetrics.wrcPlus - 100}%`} vs League Baseline
+                      </span>
+                    </div>
+
+                    <div className="bg-slate-950 border border-slate-800 rounded-xl p-3">
+                      <span className="text-[10px] uppercase font-bold text-slate-400 block">
+                        Career Consistency
+                      </span>
+                      <div className="text-2xl font-black font-mono text-teal-400 mt-0.5">
+                        {projectedPlayerMetrics.consistency}%
+                      </div>
+                      <span className="text-[10px] text-slate-500 block">Discipline &amp; floor stability</span>
+                    </div>
+
+                    <div className="bg-slate-950 border border-slate-800 rounded-xl p-3">
+                      <span className="text-[10px] uppercase font-bold text-slate-400 block">
+                        HTI Sleeper Index
+                      </span>
+                      <div className="text-2xl font-black font-mono text-amber-400 mt-0.5">
+                        {selectedTalent.hidden_talent_index ?? '—'}/100
+                      </div>
+                      <span className="text-[10px] text-slate-500 block">Organic craft score</span>
+                    </div>
+
+                    <div className="bg-slate-950 border border-slate-800 rounded-xl p-3">
+                      <span className="text-[10px] uppercase font-bold text-slate-400 block">
+                        Cost per WAR
+                      </span>
+                      <div className="text-2xl font-black font-mono text-indigo-400 mt-0.5">
+                        ${Math.round((playerEditState.base_cost ?? 75000) / Math.max(0.1, projectedPlayerMetrics.war)).toLocaleString()}
+                      </div>
+                      <span className="text-[10px] text-slate-500 block">Per 1.0 WAR yield</span>
+                    </div>
                   </div>
-                ) : (
-                  <p className="text-xs text-slate-500">No peers calculated.</p>
-                )}
-              </div>
 
-              {/* Live Statcast Simulation Sliders */}
-              <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-4">
-                <div className="flex items-center justify-between">
-                  <h4 className="text-xs font-bold uppercase tracking-wider text-white flex items-center gap-1.5">
-                    <BarChart3 size={14} className="text-emerald-400" />
-                    Statcast Metrics Simulation
-                  </h4>
-                  <span className="text-[11px] text-slate-500">Edit &amp; Simulate</span>
+                  {/* Five-Tool Creative Radar Scouting Profile */}
+                  <FiveToolRadarChart
+                    talent={{
+                      id: selectedTalent.id,
+                      name: selectedTalent.name,
+                      role: selectedTalent.role,
+                      completion_rate: playerEditState.completion_rate ?? selectedTalent.completion_rate,
+                      word_of_mouth_score: playerEditState.word_of_mouth_score ?? selectedTalent.word_of_mouth_score,
+                      rewrite_ratio: playerEditState.rewrite_ratio ?? selectedTalent.rewrite_ratio,
+                      ip_strength: playerEditState.ip_strength ?? selectedTalent.ip_strength,
+                      base_cost: playerEditState.base_cost ?? selectedTalent.base_cost,
+                      creative_war: projectedPlayerMetrics.war,
+                      regressed_war: projectedPlayerMetrics.regressedWar,
+                      creative_wrc_plus: projectedPlayerMetrics.wrcPlus,
+                      career_consistency: projectedPlayerMetrics.consistency,
+                    }}
+                    compareTalent={drawerCompareTalent}
+                    onSelectCompare={(c) => setDrawerCompareTalent(c)}
+                    availableComps={talentComps.map((tc) => ({
+                      id: tc.id,
+                      name: tc.name,
+                      role: tc.role,
+                      completion_rate: tc.completion_rate,
+                      word_of_mouth_score: tc.word_of_mouth_score,
+                      rewrite_ratio: tc.rewrite_ratio,
+                      ip_strength: tc.ip_strength,
+                      base_cost: tc.base_cost,
+                      creative_war: tc.creative_war,
+                      regressed_war: tc.regressed_war,
+                      creative_wrc_plus: tc.creative_wrc_plus,
+                      career_consistency: tc.career_consistency,
+                    }))}
+                    title="Five-Tool Creative Radar Profile"
+                    subtitle="Completion Rate • Organic WOM • Efficiency • IP Strength • Cost Index"
+                  />
+
+                  {/* Quick link to Previous Movies */}
+                  <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 flex items-center justify-between">
+                    <div>
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-white flex items-center gap-1.5">
+                        <Film size={14} className="text-amber-400" />
+                        Previous Theatrical Releases
+                      </h4>
+                      <p className="text-xs text-slate-400 mt-0.5">
+                        Browse previous directed/written films with movie posters and box office return.
+                      </p>
+                    </div>
+                    <button
+                      onClick={() => setDrawerTab('filmography')}
+                      className="bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 px-3 py-1.5 rounded-lg text-xs font-bold transition flex items-center gap-1.5"
+                    >
+                      <Film size={13} />
+                      <span>View Movies &amp; Posters</span>
+                    </button>
+                  </div>
                 </div>
+              )}
 
-                {/* Audience Retention Slider */}
-                <div className="space-y-1">
-                  <div className="flex justify-between text-xs">
-                    <span className="text-slate-400">Audience Retention (Completion)</span>
-                    <span className="font-mono text-white font-bold">
-                      {Math.round((playerEditState.completion_rate ?? 0) * 100)}%
+              {/* TAB 2: FILMOGRAPHY & MOVIE POSTERS */}
+              {drawerTab === 'filmography' && (
+                <div className="space-y-5">
+                  {/* Filmography Overview Ribbon */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                    <div className="bg-slate-950 border border-slate-800 rounded-xl p-3">
+                      <span className="text-[10px] uppercase font-bold text-slate-400 block">
+                        Tracked Feature Films
+                      </span>
+                      <div className="text-xl font-black font-mono text-amber-400 mt-0.5">
+                        {talentFilmography?.movies.length ?? 0} Titles
+                      </div>
+                      <span className="text-[10px] text-slate-500 block">Theatrical catalog</span>
+                    </div>
+
+                    <div className="bg-slate-950 border border-slate-800 rounded-xl p-3">
+                      <span className="text-[10px] uppercase font-bold text-slate-400 block">
+                        Average TMDb Rating
+                      </span>
+                      <div className="text-xl font-black font-mono text-emerald-400 mt-0.5">
+                        ⭐ {talentFilmography?.movies && talentFilmography.movies.length > 0
+                          ? (
+                              talentFilmography.movies.reduce((acc, m) => acc + m.vote_average, 0) /
+                              talentFilmography.movies.length
+                            ).toFixed(1)
+                          : '—'} / 10
+                      </div>
+                      <span className="text-[10px] text-slate-500 block">Audience rating</span>
+                    </div>
+
+                    <div className="bg-slate-950 border border-slate-800 rounded-xl p-3">
+                      <span className="text-[10px] uppercase font-bold text-slate-400 block">
+                        Estimated Box Office
+                      </span>
+                      <div className="text-xl font-black font-mono text-cyan-400 mt-0.5">
+                        ${talentFilmography?.movies
+                          ? (() => {
+                              const totalRev = talentFilmography.movies.reduce((acc, m) => acc + (m.revenue || 0), 0);
+                              return totalRev >= 1000000000
+                                ? `${(totalRev / 1000000000).toFixed(2)}B`
+                                : `${(totalRev / 1000000).toFixed(0)}M`;
+                            })()
+                          : '—'}
+                      </div>
+                      <span className="text-[10px] text-slate-500 block">Global box office</span>
+                    </div>
+
+                    <div className="bg-slate-950 border border-slate-800 rounded-xl p-3">
+                      <span className="text-[10px] uppercase font-bold text-slate-400 block">
+                        Originality Quotient
+                      </span>
+                      <div className="text-xl font-black font-mono text-purple-400 mt-0.5">
+                        {talentFilmography?.movies && talentFilmography.movies.length > 0
+                          ? `${Math.round(
+                              (talentFilmography.movies.filter((m) => !m.is_franchise).length /
+                                talentFilmography.movies.length) *
+                                100
+                            )}%`
+                          : '—'}
+                      </div>
+                      <span className="text-[10px] text-slate-500 block">Original vs Franchise</span>
+                    </div>
+                  </div>
+
+                  {/* Movie Poster Grid */}
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-white flex items-center gap-1.5">
+                        <Clapperboard size={14} className="text-amber-400" />
+                        Previous Theatrical Releases &amp; Movie Posters
+                      </h4>
+                      <span className="text-[11px] text-slate-500">
+                        Click poster to inspect details &amp; box office ROI
+                      </span>
+                    </div>
+
+                    {loadingFilmography ? (
+                      <div className="py-12 text-center text-slate-400 space-y-2">
+                        <RefreshCw size={20} className="animate-spin mx-auto text-amber-400" />
+                        <p className="text-xs">Loading filmography &amp; high-res movie posters...</p>
+                      </div>
+                    ) : talentFilmography?.movies && talentFilmography.movies.length > 0 ? (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3.5">
+                        {talentFilmography.movies.map((movie) => (
+                          <div
+                            key={movie.id}
+                            onClick={() => setSelectedPosterPreview(movie)}
+                            className="group bg-slate-950 border border-slate-800 hover:border-amber-500/60 rounded-xl overflow-hidden cursor-pointer transition-all duration-200 hover:shadow-xl hover:shadow-amber-500/10 flex flex-col"
+                          >
+                            {/* Poster Image Container */}
+                            <div className="relative aspect-[2/3] w-full overflow-hidden bg-slate-900">
+                              <img
+                                src={movie.poster_url}
+                                alt={movie.title}
+                                className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                                loading="lazy"
+                                onError={(e) => {
+                                  (e.currentTarget as HTMLElement).style.display = 'none';
+                                }}
+                              />
+                              {/* Fallback artwork */}
+                              <div className="absolute inset-0 -z-10 bg-gradient-to-br from-slate-900 via-slate-800 to-slate-950 flex flex-col items-center justify-center p-3 text-center">
+                                <Clapperboard size={28} className="text-slate-600 mb-1" />
+                                <span className="text-xs font-bold text-slate-300">{movie.title}</span>
+                                <span className="text-[10px] text-slate-500">{movie.year}</span>
+                              </div>
+
+                              {/* Hover Action Overlay */}
+                              <div className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-1.5 text-white font-bold text-xs backdrop-blur-xs">
+                                <Eye size={16} className="text-amber-400" />
+                                <span>Inspect Movie</span>
+                              </div>
+
+                              {/* Rating Badge */}
+                              <div className="absolute top-2 right-2 bg-black/80 backdrop-blur-md px-2 py-0.5 rounded-md text-[11px] font-mono font-bold text-amber-300 border border-amber-500/30 flex items-center gap-1">
+                                <span>⭐</span>
+                                <span>{movie.vote_average.toFixed(1)}</span>
+                              </div>
+
+                              {/* Year & Franchise Tag */}
+                              <div className="absolute bottom-2 left-2 flex items-center gap-1">
+                                <span className="bg-black/80 backdrop-blur-md px-1.5 py-0.5 rounded text-[10px] font-mono font-semibold text-slate-200">
+                                  {movie.year}
+                                </span>
+                                {movie.is_franchise ? (
+                                  <span className="bg-indigo-950/90 text-indigo-300 border border-indigo-500/40 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase">
+                                    Franchise
+                                  </span>
+                                ) : (
+                                  <span className="bg-emerald-950/90 text-emerald-300 border border-emerald-500/40 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase">
+                                    Original
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+
+                            {/* Movie Metadata */}
+                            <div className="p-3 space-y-1.5 flex-1 flex flex-col justify-between">
+                              <div>
+                                <h5 className="font-bold text-white text-xs truncate group-hover:text-amber-300 transition">
+                                  {movie.title}
+                                </h5>
+                                <div className="flex justify-between items-center text-[10px] text-slate-400 pt-0.5">
+                                  <span>{movie.role}</span>
+                                  <span className="font-mono text-slate-500">
+                                    {(movie.vote_count).toLocaleString()} votes
+                                  </span>
+                                </div>
+                              </div>
+
+                              {(movie.budget || movie.revenue) && (
+                                <div className="border-t border-slate-900 pt-1.5 grid grid-cols-2 text-[10px] font-mono">
+                                  <div>
+                                    <span className="text-slate-500 block text-[9px]">Budget</span>
+                                    <span className="text-slate-300">
+                                      {movie.budget ? `$${(movie.budget / 1000000).toFixed(0)}M` : '—'}
+                                    </span>
+                                  </div>
+                                  <div className="text-right">
+                                    <span className="text-slate-500 block text-[9px]">Box Office</span>
+                                    <span className="text-emerald-400 font-bold">
+                                      {movie.revenue
+                                        ? movie.revenue >= 1000000000
+                                          ? `$${(movie.revenue / 1000000000).toFixed(2)}B`
+                                          : `$${(movie.revenue / 1000000).toFixed(0)}M`
+                                        : '—'}
+                                    </span>
+                                  </div>
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="bg-slate-950 border border-slate-800 rounded-xl p-8 text-center text-slate-400">
+                        <Clapperboard size={24} className="mx-auto text-slate-600 mb-2" />
+                        <p className="text-xs">No previous theatrical catalog linked for this creator profile.</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* TAB 3: STATISTICAL COMPS */}
+              {drawerTab === 'comps' && (
+                <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-white flex items-center gap-1.5">
+                      <Sparkles size={14} className="text-amber-400" />
+                      Closest Statistical Comps (Bill James Algorithm)
+                    </h4>
+                    <span className="text-[10px] text-slate-500">Across 41,758 creators</span>
+                  </div>
+
+                  {loadingComps ? (
+                    <div className="text-center py-4 text-xs text-slate-500 animate-pulse">
+                      Calculating similarity distance...
+                    </div>
+                  ) : talentComps.length > 0 ? (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      {talentComps.map((comp) => (
+                        <div
+                          key={comp.id}
+                          onClick={() => openPlayerCard(comp, 'metrics')}
+                          className="bg-slate-900 border border-slate-800 hover:border-slate-700 p-3 rounded-lg cursor-pointer transition flex items-center gap-3"
+                        >
+                          <div className="w-10 h-10 rounded-full overflow-hidden bg-slate-800 border border-slate-700 flex-shrink-0 flex items-center justify-center text-xs font-bold text-slate-300">
+                            <img
+                              src={comp.avatar_url || getTalentAvatar(comp.name)}
+                              alt={comp.name}
+                              className="w-full h-full object-cover"
+                              onError={(e) => {
+                                (e.currentTarget as HTMLElement).style.display = 'none';
+                              }}
+                            />
+                            <span className="font-mono">{comp.name.slice(0, 2).toUpperCase()}</span>
+                          </div>
+
+                          <div className="flex-1 min-w-0 space-y-1">
+                            <div className="flex justify-between items-start">
+                              <strong className="text-white text-xs truncate block">{comp.name}</strong>
+                              <span className="text-[10px] font-mono font-bold text-emerald-400">
+                                {comp.similarity_pct}%
+                              </span>
+                            </div>
+                            <div className="flex justify-between text-[11px] text-slate-400">
+                              <span>{comp.role}</span>
+                              <span className="font-mono text-slate-300">{comp.creative_war} WAR</span>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-xs text-slate-500">No peers calculated.</p>
+                  )}
+                </div>
+              )}
+
+              {/* TAB 4: STATCAST SIMULATION SLIDERS */}
+              {drawerTab === 'statcast' && (
+                <div className="bg-slate-950 border border-slate-800 rounded-xl p-4 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h4 className="text-xs font-bold uppercase tracking-wider text-white flex items-center gap-1.5">
+                      <BarChart3 size={14} className="text-emerald-400" />
+                      Statcast Metrics Simulation
+                    </h4>
+                    <span className="text-[11px] text-slate-500">Edit &amp; Simulate Parameters</span>
+                  </div>
+
+                  {/* Audience Retention Slider */}
+                  <div className="space-y-1">
+                    <div className="flex justify-between text-xs">
+                      <span className="text-slate-400">Audience Retention (Completion)</span>
+                      <span className="font-mono text-white font-bold">
+                        {Math.round((playerEditState.completion_rate ?? 0) * 100)}%
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0"
+                      max="1"
+                      step="0.01"
+                      value={playerEditState.completion_rate ?? 0}
+                      onChange={(e) =>
+                        setPlayerEditState((prev) => ({
+                          ...prev,
+                          completion_rate: parseFloat(e.target.value),
+                        }))
+                      }
+                      className="w-full accent-emerald-400"
+                    />
+                  </div>
+
+                  {/* WOM Score Slider */}
+                  <div className="space-y-1">
+                    <div className="flex justify-between text-xs">
+                      <span className="text-slate-400">Organic WOM (Exit Velocity)</span>
+                      <span className="font-mono text-indigo-400 font-bold">
+                        {playerEditState.word_of_mouth_score ?? 0} / 10
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min="1"
+                      max="10"
+                      step="0.1"
+                      value={playerEditState.word_of_mouth_score ?? 1}
+                      onChange={(e) =>
+                        setPlayerEditState((prev) => ({
+                          ...prev,
+                          word_of_mouth_score: parseFloat(e.target.value),
+                        }))
+                      }
+                      className="w-full accent-indigo-400"
+                    />
+                  </div>
+
+                  {/* Rewrite Ratio Slider */}
+                  <div className="space-y-1">
+                    <div className="flex justify-between text-xs">
+                      <span className="text-slate-400">Rewrite Penalty (Production Inefficiency)</span>
+                      <span className="font-mono text-rose-400 font-bold">
+                        {Math.round((playerEditState.rewrite_ratio ?? 0) * 100)}%
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0"
+                      max="1"
+                      step="0.01"
+                      value={playerEditState.rewrite_ratio ?? 0}
+                      onChange={(e) =>
+                        setPlayerEditState((prev) => ({
+                          ...prev,
+                          rewrite_ratio: parseFloat(e.target.value),
+                        }))
+                      }
+                      className="w-full accent-rose-400"
+                    />
+                  </div>
+
+                  {/* IP Strength Slider */}
+                  <div className="space-y-1">
+                    <div className="flex justify-between text-xs">
+                      <span className="text-slate-400">IP Reliance (0 = Original, 1 = Heavy Franchise)</span>
+                      <span className="font-mono text-amber-400 font-bold">
+                        {Math.round((playerEditState.ip_strength ?? 0) * 100)}%
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min="0"
+                      max="1"
+                      step="0.01"
+                      value={playerEditState.ip_strength ?? 0}
+                      onChange={(e) =>
+                        setPlayerEditState((prev) => ({
+                          ...prev,
+                          ip_strength: parseFloat(e.target.value),
+                        }))
+                      }
+                      className="w-full accent-amber-400"
+                    />
+                  </div>
+
+                  {/* Base Cost */}
+                  <div className="space-y-1">
+                    <div className="flex justify-between text-xs">
+                      <span className="text-slate-400">Hiring Cap / Market Cost ($)</span>
+                      <span className="font-mono text-white font-bold">
+                        ${(playerEditState.base_cost ?? 0).toLocaleString()}
+                      </span>
+                    </div>
+                    <input
+                      type="number"
+                      step="10000"
+                      value={playerEditState.base_cost ?? 75000}
+                      onChange={(e) =>
+                        setPlayerEditState((prev) => ({
+                          ...prev,
+                          base_cost: Math.max(0, parseFloat(e.target.value) || 0),
+                        }))
+                      }
+                      className="w-full bg-slate-900 border border-slate-700 rounded px-3 py-1.5 text-xs text-white font-mono focus:outline-none focus:border-emerald-500"
+                    />
+                  </div>
+
+                  {/* Vote Count Sample Weight Slider */}
+                  <div className="space-y-1">
+                    <div className="flex justify-between text-xs">
+                      <span className="text-slate-400">Audience Vote Sample Size</span>
+                      <span className="font-mono text-cyan-400 font-bold">
+                        {projectedPlayerMetrics.votes.toLocaleString()} votes ({Math.round(projectedPlayerMetrics.sampleWeight * 100)}% Weight)
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min="5"
+                      max="5000"
+                      step="25"
+                      value={playerEditState.vote_count ?? projectedPlayerMetrics.votes}
+                      onChange={(e) =>
+                        setPlayerEditState((prev) => ({
+                          ...prev,
+                          vote_count: parseInt(e.target.value, 10),
+                        }))
+                      }
+                      className="w-full accent-cyan-400"
+                    />
+                    <span className="text-[10px] text-slate-500 block">
+                      Drives Bayesian shrinkage for Regressed WAR (K = 250 stabilization threshold).
                     </span>
                   </div>
-                  <input
-                    type="range"
-                    min="0"
-                    max="1"
-                    step="0.01"
-                    value={playerEditState.completion_rate ?? 0}
-                    onChange={(e) =>
-                      setPlayerEditState((prev) => ({
-                        ...prev,
-                        completion_rate: parseFloat(e.target.value),
-                      }))
-                    }
-                    className="w-full accent-emerald-400"
-                  />
                 </div>
-
-                {/* WOM Score Slider */}
-                <div className="space-y-1">
-                  <div className="flex justify-between text-xs">
-                    <span className="text-slate-400">Organic WOM (Exit Velocity)</span>
-                    <span className="font-mono text-indigo-400 font-bold">
-                      {playerEditState.word_of_mouth_score ?? 0} / 10
-                    </span>
-                  </div>
-                  <input
-                    type="range"
-                    min="1"
-                    max="10"
-                    step="0.1"
-                    value={playerEditState.word_of_mouth_score ?? 1}
-                    onChange={(e) =>
-                      setPlayerEditState((prev) => ({
-                        ...prev,
-                        word_of_mouth_score: parseFloat(e.target.value),
-                      }))
-                    }
-                    className="w-full accent-indigo-400"
-                  />
-                </div>
-
-                {/* Rewrite Ratio Slider */}
-                <div className="space-y-1">
-                  <div className="flex justify-between text-xs">
-                    <span className="text-slate-400">Rewrite Penalty (Production Inefficiency)</span>
-                    <span className="font-mono text-rose-400 font-bold">
-                      {Math.round((playerEditState.rewrite_ratio ?? 0) * 100)}%
-                    </span>
-                  </div>
-                  <input
-                    type="range"
-                    min="0"
-                    max="1"
-                    step="0.01"
-                    value={playerEditState.rewrite_ratio ?? 0}
-                    onChange={(e) =>
-                      setPlayerEditState((prev) => ({
-                        ...prev,
-                        rewrite_ratio: parseFloat(e.target.value),
-                      }))
-                    }
-                    className="w-full accent-rose-400"
-                  />
-                </div>
-
-                {/* IP Strength Slider */}
-                <div className="space-y-1">
-                  <div className="flex justify-between text-xs">
-                    <span className="text-slate-400">IP Reliance (0 = Original, 1 = Heavy Franchise)</span>
-                    <span className="font-mono text-amber-400 font-bold">
-                      {Math.round((playerEditState.ip_strength ?? 0) * 100)}%
-                    </span>
-                  </div>
-                  <input
-                    type="range"
-                    min="0"
-                    max="1"
-                    step="0.01"
-                    value={playerEditState.ip_strength ?? 0}
-                    onChange={(e) =>
-                      setPlayerEditState((prev) => ({
-                        ...prev,
-                        ip_strength: parseFloat(e.target.value),
-                      }))
-                    }
-                    className="w-full accent-amber-400"
-                  />
-                </div>
-
-                {/* Base Cost */}
-                <div className="space-y-1">
-                  <div className="flex justify-between text-xs">
-                    <span className="text-slate-400">Hiring Cap / Market Cost ($)</span>
-                    <span className="font-mono text-white font-bold">
-                      ${(playerEditState.base_cost ?? 0).toLocaleString()}
-                    </span>
-                  </div>
-                  <input
-                    type="number"
-                    step="10000"
-                    value={playerEditState.base_cost ?? 75000}
-                    onChange={(e) =>
-                      setPlayerEditState((prev) => ({
-                        ...prev,
-                        base_cost: Math.max(0, parseFloat(e.target.value) || 0),
-                      }))
-                    }
-                    className="w-full bg-slate-900 border border-slate-700 rounded px-3 py-1.5 text-xs text-white font-mono focus:outline-none focus:border-emerald-500"
-                  />
-                </div>
-
-                {/* Vote Count Sample Weight Slider */}
-                <div className="space-y-1">
-                  <div className="flex justify-between text-xs">
-                    <span className="text-slate-400">Audience Vote Sample Size</span>
-                    <span className="font-mono text-cyan-400 font-bold">
-                      {projectedPlayerMetrics.votes.toLocaleString()} votes ({Math.round(projectedPlayerMetrics.sampleWeight * 100)}% Weight)
-                    </span>
-                  </div>
-                  <input
-                    type="range"
-                    min="5"
-                    max="5000"
-                    step="25"
-                    value={playerEditState.vote_count ?? projectedPlayerMetrics.votes}
-                    onChange={(e) =>
-                      setPlayerEditState((prev) => ({
-                        ...prev,
-                        vote_count: parseInt(e.target.value, 10),
-                      }))
-                    }
-                    className="w-full accent-cyan-400"
-                  />
-                  <span className="text-[10px] text-slate-500 block">
-                    Drives Bayesian shrinkage for Regressed WAR (K = 250 stabilization threshold).
-                  </span>
-                </div>
-              </div>
+              )}
             </div>
 
             {/* Bottom Actions */}
@@ -2968,6 +3707,100 @@ base_path = "movie_data"
               >
                 <Check size={14} />
                 {savingPlayer ? 'Saving to Database...' : 'Save Metrics'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Movie Poster Lightbox Preview Modal */}
+      {selectedPosterPreview && (
+        <div
+          className="fixed inset-0 bg-black/85 backdrop-blur-md z-60 flex items-center justify-center p-4 animate-fadeIn"
+          onClick={() => setSelectedPosterPreview(null)}
+        >
+          <div
+            className="bg-slate-900 border border-slate-700/80 rounded-2xl max-w-md w-full overflow-hidden shadow-2xl flex flex-col"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="relative aspect-[2/3] max-h-[460px] w-full overflow-hidden bg-black">
+              <img
+                src={selectedPosterPreview.poster_url}
+                alt={selectedPosterPreview.title}
+                className="w-full h-full object-contain"
+              />
+              <button
+                onClick={() => setSelectedPosterPreview(null)}
+                className="absolute top-3 right-3 bg-black/70 hover:bg-black text-white p-1.5 rounded-full backdrop-blur-md border border-white/20 transition"
+              >
+                <X size={18} />
+              </button>
+              <div className="absolute bottom-3 left-3 bg-black/80 backdrop-blur-md px-3 py-1 rounded-lg border border-amber-500/40 text-amber-300 font-mono font-bold text-xs flex items-center gap-1.5">
+                <span>⭐</span>
+                <span>{selectedPosterPreview.vote_average.toFixed(1)} / 10 TMDb Rating</span>
+              </div>
+            </div>
+
+            <div className="p-5 space-y-3 bg-slate-950">
+              <div className="flex justify-between items-start">
+                <div>
+                  <h4 className="text-lg font-black text-white">{selectedPosterPreview.title}</h4>
+                  <div className="flex items-center gap-2 text-xs text-slate-400 mt-0.5">
+                    <span className="font-mono text-slate-300 font-bold">{selectedPosterPreview.year}</span>
+                    <span>•</span>
+                    <span>{selectedPosterPreview.role}</span>
+                    <span>•</span>
+                    <span>{(selectedPosterPreview.vote_count).toLocaleString()} votes</span>
+                  </div>
+                </div>
+                {selectedPosterPreview.is_franchise ? (
+                  <span className="bg-indigo-950 text-indigo-300 border border-indigo-500/40 px-2 py-0.5 rounded text-[10px] font-bold uppercase">
+                    Franchise Asset
+                  </span>
+                ) : (
+                  <span className="bg-emerald-950 text-emerald-300 border border-emerald-500/40 px-2 py-0.5 rounded text-[10px] font-bold uppercase">
+                    Original Property
+                  </span>
+                )}
+              </div>
+
+              {/* Financial Box Office Stats */}
+              {(selectedPosterPreview.budget || selectedPosterPreview.revenue) && (
+                <div className="grid grid-cols-3 gap-2 bg-slate-900 border border-slate-800 p-3 rounded-xl font-mono text-xs">
+                  <div>
+                    <span className="text-[10px] text-slate-500 block uppercase">Budget</span>
+                    <span className="text-slate-200 font-bold">
+                      {selectedPosterPreview.budget
+                        ? `$${(selectedPosterPreview.budget / 1000000).toFixed(1)}M`
+                        : 'N/A'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-slate-500 block uppercase">Box Office</span>
+                    <span className="text-emerald-400 font-bold">
+                      {selectedPosterPreview.revenue
+                        ? selectedPosterPreview.revenue >= 1000000000
+                          ? `$${(selectedPosterPreview.revenue / 1000000000).toFixed(2)}B`
+                          : `$${(selectedPosterPreview.revenue / 1000000).toFixed(1)}M`
+                        : 'N/A'}
+                    </span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-slate-500 block uppercase">Yield Return</span>
+                    <span className="text-amber-400 font-bold">
+                      {selectedPosterPreview.budget && selectedPosterPreview.revenue
+                        ? `${(selectedPosterPreview.revenue / selectedPosterPreview.budget).toFixed(1)}x ROI`
+                        : 'N/A'}
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              <button
+                onClick={() => setSelectedPosterPreview(null)}
+                className="w-full bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold py-2 rounded-lg text-xs transition"
+              >
+                Close Poster Preview
               </button>
             </div>
           </div>
