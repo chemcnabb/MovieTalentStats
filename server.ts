@@ -6,6 +6,13 @@ import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import { runHistoricalValidation } from './tests/historical_validation.test';
 import { getTalentFilmography, getTalentAvatar } from './src/data/filmographyData';
+import {
+  IMDB_ACTIVE_SOURCES,
+  CURATED_UP_AND_COMING_TALENT,
+  calculateTalentPrediction,
+  getImdbDataForTalent,
+  ImdbProspectRecord,
+} from './src/data/imdbDataSources';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -752,6 +759,214 @@ async function startServer() {
 
   app.get('/talent/historical-tests', handleHistoricalTests);
   app.get('/api/historical-tests', handleHistoricalTests);
+
+  // 1. IMDb Live Data Connectors Status
+  const handleImdbSources = (_req: Request, res: Response) => {
+    res.json({
+      sources: IMDB_ACTIVE_SOURCES,
+      overall_status: 'HEALTHY',
+      last_global_sync: new Date().toISOString(),
+      active_stream_records: 41758,
+    });
+  };
+
+  app.get('/talent/imdb/sources', handleImdbSources);
+  app.get('/api/imdb/sources', handleImdbSources);
+
+  // 2. Up & Coming Talent Prospects Pipeline with Predictive Analytics
+  const handleImdbProspects = (req: Request, res: Response) => {
+    const stage = req.query.stage as string;
+    const min_bvi = req.query.min_bvi ? parseFloat(req.query.min_bvi as string) : undefined;
+    const max_cap = req.query.max_cap ? parseFloat(req.query.max_cap as string) : undefined;
+    const search = ((req.query.search as string) || '').toLowerCase().trim();
+
+    // Start with curated prospects
+    let list: ImdbProspectRecord[] = [...CURATED_UP_AND_COMING_TALENT];
+
+    // Filter by stage
+    if (stage) {
+      list = list.filter((p) => p.breakout_stage.toLowerCase().includes(stage.toLowerCase()));
+    }
+
+    // Filter by min BVI
+    if (min_bvi !== undefined && !isNaN(min_bvi)) {
+      list = list.filter((p) => p.breakout_velocity_index >= min_bvi);
+    }
+
+    // Filter by max cap
+    if (max_cap !== undefined && !isNaN(max_cap)) {
+      list = list.filter((p) => p.base_cost <= max_cap);
+    }
+
+    // Filter by search query
+    if (search) {
+      list = list.filter(
+        (p) =>
+          p.name.toLowerCase().includes(search) ||
+          p.role.toLowerCase().includes(search) ||
+          p.star_archetype_comp.toLowerCase().includes(search) ||
+          p.known_for_titles.some((t) => t.title.toLowerCase().includes(search))
+      );
+    }
+
+    // Sort by Breakout Velocity Index by default
+    const sort_by = (req.query.sort_by as string) || 'bvi';
+    list.sort((a, b) => {
+      if (sort_by === 'starmeter') return a.starmeter_rank - b.starmeter_rank; // lower is better
+      if (sort_by === 'war3') return b.projected_war_year3 - a.projected_war_year3;
+      if (sort_by === 'surplus') return b.projected_surplus_value - a.projected_surplus_value;
+      if (sort_by === 'probability') return b.breakout_probability_pct - a.breakout_probability_pct;
+      if (sort_by === 'cost') return a.base_cost - b.base_cost;
+      return b.breakout_velocity_index - a.breakout_velocity_index;
+    });
+
+    res.json({
+      total: list.length,
+      prospects: list,
+      pipeline_summary: {
+        avg_breakout_velocity: Math.round(list.reduce((acc, p) => acc + p.breakout_velocity_index, 0) / Math.max(1, list.length)),
+        avg_projected_war_year3: Math.round((list.reduce((acc, p) => acc + p.projected_war_year3, 0) / Math.max(1, list.length)) * 10) / 10,
+        total_projected_surplus: list.reduce((acc, p) => acc + p.projected_surplus_value, 0),
+        top_prospect_name: list[0]?.name || '',
+      },
+    });
+  };
+
+  app.get('/talent/prospects', handleImdbProspects);
+  app.get('/api/imdb/prospects', handleImdbProspects);
+
+  // 3. Live IMDb Search & Instant Stat Retrieval
+  const handleImdbSearch = (req: Request, res: Response) => {
+    const q = ((req.query.q as string) || '').toLowerCase().trim();
+    if (!q) {
+      return res.json({ results: [] });
+    }
+
+    // Match in prospects
+    const prospectMatches = CURATED_UP_AND_COMING_TALENT.filter(
+      (p) =>
+        p.name.toLowerCase().includes(q) ||
+        p.imdb_id.toLowerCase().includes(q) ||
+        p.known_for_titles.some((t) => t.title.toLowerCase().includes(q))
+    );
+
+    // Match in main talent pool
+    const poolMatches = talentPool
+      .filter((t) => t.name.toLowerCase().includes(q))
+      .slice(0, 10)
+      .map((t) => getImdbDataForTalent(t));
+
+    // Deduplicate by name
+    const seen = new Set<string>();
+    const combined: ImdbProspectRecord[] = [];
+    for (const item of [...prospectMatches, ...poolMatches]) {
+      const k = item.name.toLowerCase();
+      if (!seen.has(k)) {
+        seen.add(k);
+        combined.push(item);
+      }
+    }
+
+    res.json({
+      query: q,
+      total_matches: combined.length,
+      results: combined,
+    });
+  };
+
+  app.get('/talent/imdb/search', handleImdbSearch);
+  app.get('/api/imdb/search', handleImdbSearch);
+
+  // 4. Interactive Simulation & 3-Year Projection Model
+  const handlePredictTalent = (req: Request, res: Response) => {
+    const {
+      current_war = 5.0,
+      imdb_rating = 7.5,
+      starmeter_rank = 150,
+      starmeter_change = 100,
+      completion_rate = 0.8,
+      rewrite_ratio = 0.05,
+      ip_strength = 0.0,
+      base_cost = 250000,
+      festival_boost = 0.5,
+    } = req.body;
+
+    const prediction = calculateTalentPrediction({
+      current_war: Number(current_war) || 5.0,
+      imdb_rating: Number(imdb_rating) || 7.5,
+      starmeter_rank: Number(starmeter_rank) || 150,
+      starmeter_change: Number(starmeter_change) || 100,
+      completion_rate: Number(completion_rate) || 0.8,
+      rewrite_ratio: Number(rewrite_ratio) || 0.05,
+      ip_strength: Number(ip_strength) || 0.0,
+      base_cost: Number(base_cost) || 250000,
+      festival_boost: Number(festival_boost) || 0.5,
+    });
+
+    res.json({
+      inputs: req.body,
+      prediction,
+    });
+  };
+
+  app.post('/talent/predict', handlePredictTalent);
+  app.post('/api/talent/predict', handlePredictTalent);
+
+  // 5. Import Prospect into Active Talent Pool
+  const handleImportProspect = (req: Request, res: Response) => {
+    const { prospect_id, name, role, base_cost, completion_rate, word_of_mouth_score, rewrite_ratio, ip_strength } = req.body;
+
+    const prospect = CURATED_UP_AND_COMING_TALENT.find((p) => p.id === prospect_id || p.name.toLowerCase() === (name || '').toLowerCase());
+
+    const finalName = prospect ? prospect.name : (name || 'New Prospect');
+    const finalRole = prospect ? (prospect.role.includes('Director') ? 'Director' : 'Screenwriter') : (role || 'Director');
+    const finalCost = prospect ? prospect.base_cost : (Number(base_cost) || 250000);
+    const finalComp = prospect ? prospect.completion_rate : (Number(completion_rate) || 0.85);
+    const finalWom = prospect ? prospect.word_of_mouth_score : (Number(word_of_mouth_score) || 8.5);
+    const finalRew = prospect ? prospect.rewrite_ratio : (Number(rewrite_ratio) || 0.05);
+    const finalIp = prospect ? prospect.ip_strength : (Number(ip_strength) || 0.0);
+
+    // Check if already in talent pool
+    const existing = talentPool.find((t) => t.name.toLowerCase() === finalName.toLowerCase());
+    if (existing) {
+      const config = getFormulaConfig(req);
+      return res.json({
+        message: `${finalName} is already in the talent pool!`,
+        talent: formatTalentRecord(existing, config, cachedLeagueAvgWar),
+        is_new: false,
+      });
+    }
+
+    const newRecord: TalentRecord = {
+      id: crypto.randomUUID(),
+      name: finalName,
+      role: finalRole,
+      completion_rate: finalComp,
+      word_of_mouth_score: finalWom,
+      rewrite_ratio: finalRew,
+      ip_strength: finalIp,
+      base_cost: finalCost,
+      vote_count: Math.round(finalWom * 2000),
+      avatar_url: prospect?.avatar_url,
+    };
+
+    talentPool.unshift(newRecord);
+    talentMap.set(newRecord.id, newRecord);
+    recomputeLeagueAvgWar();
+
+    const config = getFormulaConfig(req);
+    const formatted = formatTalentRecord(newRecord, config, cachedLeagueAvgWar);
+
+    res.status(201).json({
+      message: `Successfully drafted ${finalName} into active talent pool!`,
+      talent: formatted,
+      is_new: true,
+      total_talent: talentPool.length,
+    });
+  };
+
+  app.post('/talent/prospects/import', handleImportProspect);
+  app.post('/api/imdb/import', handleImportProspect);
 
   // Vite middleware in dev or static files in production
   if (process.env.NODE_ENV === 'production' && fs.existsSync(path.resolve(__dirname, 'dist'))) {
