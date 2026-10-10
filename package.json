@@ -7,7 +7,8 @@
     "dev": "tsx server.ts",
     "build": "vite build",
     "preview": "vite preview",
-    "lint": "eslint ."
+    "lint": "eslint .",
+    "test": "tsx tests/historical_validation.test.ts"
   },
   "dependencies": {
     "@types/papaparse": "^5.5.2",
@@ -15,7 +16,8 @@
     "lucide-react": "^1.54.0",
     "papaparse": "^5.7.0",
     "react": "^19.2.8",
-    "react-dom": "^19.2.8"
+    "react-dom": "^19.2.8",
+    "recharts": "^3.10.1"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

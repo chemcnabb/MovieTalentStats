@@ -91,11 +91,12 @@ def run_sabermetric_ingestion(metadata_path=f"{base_path}/movies_metadata.csv", 
             
             if key not in scouting_aggregation:
                 scouting_aggregation[key] = {
-                    "retention": [], "wom": [], "budget": [], "franchise": [], "count": 0
+                    "retention": [], "wom": [], "votes": [], "budget": [], "franchise": [], "count": 0
                 }
                 
             scouting_aggregation[key]["retention"].append(derived_retention)
             scouting_aggregation[key]["wom"].append(derived_wom)
+            scouting_aggregation[key]["votes"].append(vote_count)
             scouting_aggregation[key]["budget"].append(budget if budget > 0 else 500000)
             scouting_aggregation[key]["franchise"].append(is_franchise)
             scouting_aggregation[key]["count"] += 1
@@ -110,6 +111,7 @@ def run_sabermetric_ingestion(metadata_path=f"{base_path}/movies_metadata.csv", 
 
         avg_retention = sum(metrics["retention"]) / len(metrics["retention"])
         avg_wom = sum(metrics["wom"]) / len(metrics["wom"])
+        avg_votes = sum(metrics["votes"]) / len(metrics["votes"]) if "votes" in metrics and len(metrics["votes"]) > 0 else 100
         avg_franchise = sum(metrics["franchise"]) / len(metrics["franchise"])
         avg_budget = sum(metrics["budget"]) / len(metrics["budget"])
         
@@ -124,7 +126,8 @@ def run_sabermetric_ingestion(metadata_path=f"{base_path}/movies_metadata.csv", 
             "word_of_mouth_score": round(avg_wom, 1),
             "rewrite_ratio": rewrite_variance,
             "ip_strength": round(avg_franchise, 2),
-            "base_cost": min(1500000.0, float(calculated_cost))
+            "base_cost": min(1500000.0, float(calculated_cost)),
+            "vote_count": max(1, int(round(avg_votes)))
         })
 
     os.makedirs(os.path.dirname(output_json), exist_ok=True)
