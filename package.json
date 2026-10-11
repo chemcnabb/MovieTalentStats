@@ -6,9 +6,10 @@
   "scripts": {
     "dev": "tsx server.ts",
     "build": "vite build",
+    "start": "node server.ts",
     "preview": "vite preview",
     "lint": "eslint .",
-    "test": "tsx tests/historical_validation.test.ts"
+    "test": "node tests/historical_validation.test.ts"
   },
   "dependencies": {
     "@types/papaparse": "^5.5.2",
@@ -17,7 +18,8 @@
     "papaparse": "^5.7.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
-    "recharts": "^3.10.1"
+    "recharts": "^3.10.1",
+    "tsx": "^4.19.3"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

@@ -1,18 +1,18 @@
-import express, { Request, Response } from 'express';
+import express, { type Request, type Response } from 'express';
 import { createServer as createViteServer } from 'vite';
 import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
 import { fileURLToPath } from 'url';
-import { runHistoricalValidation } from './tests/historical_validation.test';
-import { getTalentFilmography, getTalentAvatar } from './src/data/filmographyData';
+import { runHistoricalValidation } from './src/data/historicalValidation.ts';
+import { getTalentFilmography, getTalentAvatar } from './src/data/filmographyData.ts';
 import {
   IMDB_ACTIVE_SOURCES,
   CURATED_UP_AND_COMING_TALENT,
   calculateTalentPrediction,
   getImdbDataForTalent,
-  ImdbProspectRecord,
-} from './src/data/imdbDataSources';
+  type ImdbProspectRecord,
+} from './src/data/imdbDataSources.ts';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -227,7 +227,7 @@ function formatTalentRecord(
 
 async function startServer() {
   const app = express();
-  const PORT = 3000;
+  const PORT = Number(process.env.PORT) || 3000;
   const HOST = '0.0.0.0';
 
   app.use(express.json({ limit: '50mb' }));
